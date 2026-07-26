@@ -1,15 +1,18 @@
 # Swissquote → eCH‑0196 E‑Steuerauszug Converter
 
 A small web app that turns a **Swissquote transactions CSV export** into the
-official Swiss **eCH‑0196 electronic tax statement (E‑Steuerauszug) XML** that
-you can import into your cantonal tax‑declaration software. It asks you for the
-few fields the CSV doesn't contain, and shows a dashboard summarising your
-**Zugänge** (purchases), **Abgänge** (disposals) and **Dividenden**.
+official Swiss **eCH‑0196 electronic tax statement (E‑Steuerauszug)** that you
+can import into your cantonal tax‑declaration software — both as **XML** and as
+the **official PDF with PDF417 barcodes** that most tax tools scan on import. It
+asks you for the few fields the CSV doesn't contain, and shows a dashboard
+summarising your **Zugänge** (purchases), **Abgänge** (disposals) and
+**Dividenden**.
 
-It reuses the official eCH‑0196 data models and XSD schema from the
-[`opensteuerauszug`](https://github.com/vroonhof/opensteuerauszug) project, so
-the generated XML is validated against the real schema (eCH‑0196 v2.2) before
-you download it.
+It reuses the official eCH‑0196 data models, XSD schema and barcode‑PDF renderer
+from the [`opensteuerauszug`](https://github.com/vroonhof/opensteuerauszug)
+project, so the generated XML is validated against the real schema
+(eCH‑0196 v2.2) before you download it, and the PDF carries eCH‑0196‑compliant
+macro‑PDF417 barcodes.
 
 ![workflow: upload CSV → answer a few questions → dashboard + validated XML download]
 
@@ -22,8 +25,8 @@ you download it.
 ```
 
 Then open <http://127.0.0.1:8000>, upload your
-`transactionsfrom01012025to31122025.csv`, fill in the form, and download the
-XML.
+`transactionsfrom01012025to31122025.csv`, fill in the form, and download either
+the **PDF with barcodes** (scan/import into your tax software) or the **XML**.
 
 Manual setup instead of `run.sh`:
 
@@ -57,7 +60,8 @@ CSV bytes ─▶ csv_parser ─▶ classifier ─▶ statement_builder ─▶ eC
 | `backend/statement_builder.py` | Build the eCH‑0196 `TaxStatement` (reuses `opensteuerauszug` models) |
 | `backend/summary.py` | Aggregate the dashboard figures |
 | `backend/validation.py` | Validate the XML against the vendored eCH‑0196 XSDs (`specs/`) |
-| `backend/main.py` | FastAPI app (`/api/analyze`, `/api/generate`) + serves `frontend/` |
+| `backend/pdf_render.py` | Render the official PDF incl. PDF417 barcodes (via `opensteuerauszug`) |
+| `backend/main.py` | FastAPI app (`/api/analyze`, `/api/generate`, `/api/pdf`) + serves `frontend/` |
 | `frontend/` | Zero‑dependency single‑page UI (upload → questions → dashboard) |
 
 ### How each Swissquote transaction type is mapped

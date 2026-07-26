@@ -18,8 +18,9 @@ What is exact vs. estimated
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from decimal import Decimal, ROUND_HALF_UP
 from typing import List, Optional
 
@@ -144,6 +145,20 @@ def _build_bank_accounts(
         totalGrossRevenueB=Decimal(0),
         totalWithHoldingTaxClaim=Decimal(0),
     )
+
+
+def _generate_statement_id(config: StatementConfig, period_to: date) -> str:
+    """Build the 31-char eCH-0196 statement id.
+
+    Format (eCH-0196 v2.1/2.2): ``CC NNNNN CCCCCCCCCCCCCC YYYYMMDD SS``
+    = country(2) + clearing number(5) + customer id(14, X-padded) + date(8) +
+    sequence(2).  The clearing number identifies the custodian bank; the render
+    step reads it back from ``id[2:7]`` to place it on the barcode pages.
+    """
+    country = (config.country or "CH").upper()[:2].ljust(2, "X")
+    clearing = re.sub(r"\D", "", config.institution_clearing or "06435")[:5].rjust(5, "0")
+    customer = re.sub(r"[^A-Za-z0-9]", "", config.client_number or "")[:14].ljust(14, "X")
+    return f"{country}{clearing}{customer}{period_to:%Y%m%d}01"
 
 
 def _last_trade_price(inst: Instrument) -> Optional[Decimal]:
@@ -389,7 +404,7 @@ def build_statement(result: ClassificationResult, config: StatementConfig):
 
     statement = TaxStatement(
         minorVersion=2,
-        id=f"SQ-{config.tax_year}-{datetime.now(timezone.utc):%Y%m%d%H%M%S}",
+        id=_generate_statement_id(config, config.period_to),
         creationDate=datetime.now(timezone.utc),
         taxPeriod=config.tax_year,
         periodFrom=config.period_from,

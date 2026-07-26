@@ -60,3 +60,20 @@ def test_totals_are_present_for_schema(built):
     assert statement.totalGrossRevenueA is not None
     assert statement.totalGrossRevenueB is not None
     assert statement.totalWithHoldingTaxClaim is not None
+
+
+def test_statement_id_is_ech_format(built):
+    statement, _ = built
+    # 31 chars: CH + clearing(5) + customer(14) + date(8) + seq(2)
+    assert len(statement.id) == 31
+    assert statement.id.startswith("CH06435")
+    assert statement.id.endswith("2025123101")
+
+
+def test_barcode_pdf_renders(built):
+    statement, _ = built
+    from backend.pdf_render import render_pdf
+
+    pdf = render_pdf(statement)
+    assert pdf.startswith(b"%PDF")
+    assert len(pdf) > 20_000  # a multi-page statement with barcode pages

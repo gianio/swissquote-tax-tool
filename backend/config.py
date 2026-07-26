@@ -44,6 +44,7 @@ class StatementConfig:
     depot_number: str = "1"
     institution_name: str = "Swissquote Bank AG"
     institution_lei: Optional[str] = None
+    institution_clearing: str = "06435"  # Swissquote Bank Ltd BC/clearing number
     country: str = "CH"                  # taxpayer country of residence
 
     include_options: bool = True

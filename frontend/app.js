@@ -4,6 +4,7 @@
 let selectedFile = null;
 let analysis = null;      // response from /api/analyze
 let lastResult = null;    // response from /api/generate
+let lastConfig = null;    // config sent to /api/generate (reused for PDF)
 
 const $ = (id) => document.getElementById(id);
 
@@ -146,9 +147,10 @@ $("generateBtn").addEventListener("click", async () => {
   btn.innerHTML = '<span class="spinner"></span> Erzeuge…';
   $("formError").hidden = true;
   try {
+    lastConfig = collectConfig();
     const fd = new FormData();
     fd.append("file", selectedFile);
-    fd.append("config", JSON.stringify(collectConfig()));
+    fd.append("config", JSON.stringify(lastConfig));
     const res = await fetch("/api/generate", { method: "POST", body: fd });
     const data = await res.json();
     if (!res.ok || !data.ok) throw new Error(data.detail || "Erzeugung fehlgeschlagen.");
@@ -187,13 +189,43 @@ function renderResult(data) {
 $("downloadBtn").addEventListener("click", () => {
   if (!lastResult) return;
   const blob = new Blob([lastResult.xml], { type: "application/xml" });
+  triggerDownload(blob, lastResult.filename);
+});
+
+$("downloadPdfBtn").addEventListener("click", async () => {
+  if (!selectedFile || !lastConfig) return;
+  const btn = $("downloadPdfBtn");
+  const original = btn.textContent;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Erzeuge PDF…';
+  try {
+    const fd = new FormData();
+    fd.append("file", selectedFile);
+    fd.append("config", JSON.stringify(lastConfig));
+    const res = await fetch("/api/pdf", { method: "POST", body: fd });
+    if (!res.ok) {
+      let msg = "PDF konnte nicht erzeugt werden.";
+      try { msg = (await res.json()).detail || msg; } catch (_) {}
+      throw new Error(msg);
+    }
+    const blob = await res.blob();
+    triggerDownload(blob, (lastResult && lastResult.filename || "eCH-0196_Swissquote").replace(/\.xml$/, "") + ".pdf");
+  } catch (err) {
+    alert(err.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = original;
+  }
+});
+
+function triggerDownload(blob, filename) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = lastResult.filename;
+  a.download = filename;
   a.click();
   URL.revokeObjectURL(url);
-});
+}
 
 // ---- Dashboard rendering (reused for preview + result) --------------------
 function kpi(cls, label, value, unit, foot) {

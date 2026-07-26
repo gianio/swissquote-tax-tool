@@ -18,12 +18,13 @@ from pathlib import Path
 from typing import Optional
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from .classifier import classify
 from .config import DEFAULT_FX_RATES, VALID_CANTONS, StatementConfig
 from .csv_parser import CsvParseError, infer_tax_year, parse_transactions
+from .pdf_render import PdfRenderError, render_pdf
 from .statement_builder import build_statement
 from .summary import build_summary
 from .validation import validate_ech0196
@@ -179,6 +180,36 @@ async def generate(
         },
         "summary": summary,
     })
+
+
+@app.post("/api/pdf")
+async def pdf(
+    file: UploadFile = File(...),
+    config: Optional[str] = Form(default=None),
+) -> Response:
+    """Render the official eCH-0196 PDF (incl. PDF417 barcodes) for download."""
+    data = _read_upload(file)
+    try:
+        transactions = parse_transactions(data)
+    except CsvParseError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+
+    tax_year = infer_tax_year(transactions)
+    cfg = _config_from_form(config, tax_year)
+    result = classify(transactions, default_country=cfg.country)
+    statement, _ = build_statement(result, cfg)
+
+    try:
+        pdf_bytes = render_pdf(statement, language="de")
+    except PdfRenderError as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+    filename = f"eCH-0196_Swissquote_{cfg.tax_year}.pdf"
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @app.get("/api/health")

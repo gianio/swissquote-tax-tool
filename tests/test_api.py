@@ -36,6 +36,17 @@ def test_generate_returns_valid_xml():
     assert data["filename"] == "eCH-0196_Swissquote_2025.xml"
 
 
+def test_pdf_endpoint_returns_barcode_pdf():
+    files = {"file": ("sample.csv", SAMPLE_CSV.read_bytes(), "text/csv")}
+    config = json.dumps({"canton": "ZH", "client_number": "1",
+                         "fx_rates": {"USD": "0.8", "EUR": "0.93"}})
+    res = client.post("/api/pdf", files=files, data={"config": config})
+    assert res.status_code == 200
+    assert res.headers["content-type"] == "application/pdf"
+    assert res.content.startswith(b"%PDF")
+    assert "attachment" in res.headers.get("content-disposition", "")
+
+
 def test_generate_rejects_bad_canton():
     files = {"file": ("sample.csv", SAMPLE_CSV.read_bytes(), "text/csv")}
     res = client.post("/api/generate", files=files, data={"config": json.dumps({"canton": "XX"})})
