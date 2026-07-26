@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Swissquote → eCH-0196 Steuerauszug</title>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧾</text></svg>">
+</head>
+<body>
+  <div class="wrap">
+    <header class="app">
+      <div class="logo">
+        <div class="mark">SQ</div>
+        <div>
+          <h1>Swissquote → E‑Steuerauszug</h1>
+          <div class="sub">CSV‑Transaktionsexport → eCH‑0196 XML für Ihre Steuersoftware</div>
+        </div>
+      </div>
+      <button class="theme-toggle" id="themeToggle" type="button">◐ Theme</button>
+    </header>
+
+    <div class="steps">
+      <div class="step-pill active" data-step="1"><span class="n">1</span> CSV hochladen</div>
+      <div class="step-pill" data-step="2"><span class="n">2</span> Angaben ergänzen</div>
+      <div class="step-pill" data-step="3"><span class="n">3</span> Auszug &amp; Dashboard</div>
+    </div>
+
+    <!-- STEP 1: UPLOAD -->
+    <section id="section-upload">
+      <div class="card">
+        <h2>1. Swissquote‑Transaktions‑CSV hochladen</h2>
+        <p class="hint">Exportieren Sie in Swissquote unter <em>Transaktionen → Export (CSV)</em> das gewünschte Steuerjahr. Die Datei wird nur lokal auf diesem Server verarbeitet und nirgends gespeichert.</p>
+        <div class="dropzone" id="dropzone">
+          <div class="big">Datei hierher ziehen oder klicken</div>
+          <div class="small">Format: <code>transactionsfrom…csv</code> (Semikolon‑getrennt)</div>
+          <div class="file" id="fileName" hidden></div>
+        </div>
+        <input type="file" id="fileInput" accept=".csv,text/csv">
+        <div class="actions">
+          <button class="btn primary" id="analyzeBtn" type="button" disabled>Analysieren</button>
+        </div>
+        <div class="error" id="uploadError" hidden></div>
+      </div>
+    </section>
+
+    <!-- STEP 2: QUESTIONS -->
+    <section id="section-form" hidden>
+      <div class="card">
+        <h2>2. Erforderliche Angaben</h2>
+        <p class="hint">Diese Felder stehen nicht im CSV und werden für den eCH‑0196‑Auszug benötigt.</p>
+
+        <div class="subhead">Steuerpflichtige Person</div>
+        <div class="grid3">
+          <div class="field"><label>Vorname</label><input id="f_first" placeholder="Vorname"></div>
+          <div class="field"><label>Nachname</label><input id="f_last" placeholder="Nachname"></div>
+          <div class="field">
+            <label>Kanton</label>
+            <select id="f_canton"></select>
+          </div>
+        </div>
+
+        <div class="subhead">Depot</div>
+        <div class="grid3">
+          <div class="field"><label>Steuerjahr</label><input id="f_year" type="number"></div>
+          <div class="field"><label>Kunden‑/Kontonummer <span class="desc">Swissquote</span></label><input id="f_client" placeholder="z.B. 123456"></div>
+          <div class="field"><label>Depot‑Nr.</label><input id="f_depot" value="1"></div>
+        </div>
+        <div class="grid2" style="margin-top:14px">
+          <div class="field"><label>Bank / Institut</label><input id="f_institution" value="Swissquote Bank AG"></div>
+          <div class="field"><label>Wohnsitzland (ISO‑2)</label><input id="f_country" value="CH" maxlength="2"></div>
+        </div>
+
+        <div class="subhead">Positionsarten einbeziehen</div>
+        <div class="toggles">
+          <label class="toggle"><input type="checkbox" id="t_options" checked> Optionen / Warrants</label>
+          <label class="toggle"><input type="checkbox" id="t_crypto" checked> Krypto (BTC, ETH)</label>
+          <label class="toggle"><input type="checkbox" id="t_metals" checked> Edelmetalle (Gold/XAU)</label>
+        </div>
+
+        <div class="subhead">Umrechnungskurse in CHF <span class="desc" style="text-transform:none;font-weight:400"> (Schätzwerte – nur für die CHF‑Summen; die Steuersoftware rechnet mit der offiziellen Kursliste nach)</span></div>
+        <div class="grid3" id="fxGrid"></div>
+
+        <div class="banner warn" style="margin-top:18px">
+          <span class="ico">⚠️</span>
+          <div>Das CSV enthält nur Transaktionen – <strong>keine Anfangsbestände vor dem Steuerjahr und keine Marktwerte per 31.12.</strong> Bestände und Erträge werden exakt rekonstruiert; die CHF‑<em>Steuerwerte</em> sind Schätzungen (letzter Handelskurs) und mit <code>kursliste=true</code> markiert, damit Ihre Steuersoftware sie mit den offiziellen Werten überschreibt.</div>
+        </div>
+
+        <div class="actions">
+          <button class="btn ghost" id="backBtn" type="button">Zurück</button>
+          <button class="btn primary" id="generateBtn" type="button">Steuerauszug erzeugen</button>
+        </div>
+        <div class="error" id="formError" hidden></div>
+      </div>
+
+      <!-- live preview dashboard -->
+      <div id="previewHost"></div>
+    </section>
+
+    <!-- STEP 3: RESULT -->
+    <section id="section-result" hidden>
+      <div class="card">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap">
+          <div>
+            <h2 style="margin-bottom:6px">3. Ihr eCH‑0196 E‑Steuerauszug</h2>
+            <div id="validationBadge"></div>
+          </div>
+          <div class="actions" style="margin-top:0">
+            <button class="btn ghost" id="restartBtn" type="button">Neue Datei</button>
+            <button class="btn primary" id="downloadBtn" type="button">⬇ XML herunterladen</button>
+          </div>
+        </div>
+        <div id="validationErrors"></div>
+        <div class="banner info" style="margin-top:14px">
+          <span class="ico">ℹ️</span>
+          <div>Laden Sie die XML‑Datei in Ihre kantonale Steuererklärungs‑Software (z.B. via <em>„E‑Steuerauszug / Wertschriften importieren“</em>). Dies ist ein selbst erzeugter, <strong>nicht bank‑signierter</strong> Auszug – die Software übernimmt Mengen und Erträge und ergänzt die offiziellen Steuerwerte.</div>
+        </div>
+      </div>
+
+      <div id="dashboardHost"></div>
+    </section>
+
+    <footer class="app">
+      Läuft vollständig lokal · eCH‑0196 v2.2 · Modelle von
+      <a href="https://github.com/vroonhof/opensteuerauszug" target="_blank" rel="noopener">opensteuerauszug</a>.
+      Kein Ersatz für Steuerberatung.
+    </footer>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
