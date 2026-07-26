@@ -430,10 +430,16 @@ def build_statement(result: ClassificationResult, config: StatementConfig):
         lastName=config.last_name or None,
     )
 
+    # Anchor the creation timestamp to the end of the tax period. Some cantonal
+    # importers derive the tax year from creationDate rather than taxPeriod, so a
+    # "now" timestamp (e.g. mid-2026 for a 2025 statement) would otherwise make
+    # the statement look like it belongs to the wrong year.
+    creation_date = datetime(config.tax_year, 12, 31, 12, 0, tzinfo=timezone.utc)
+
     statement = TaxStatement(
         minorVersion=2,
         id=_generate_statement_id(config, config.period_to),
-        creationDate=datetime.now(timezone.utc),
+        creationDate=creation_date,
         taxPeriod=config.tax_year,
         periodFrom=config.period_from,
         periodTo=config.period_to,
