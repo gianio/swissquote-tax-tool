@@ -62,7 +62,10 @@
 
         <div class="subhead">Depot</div>
         <div class="grid3">
-          <div class="field"><label>Steuerjahr</label><input id="f_year" type="number"></div>
+          <div class="field">
+            <label>Steuerjahr <span class="desc">massgebend für Periode &amp; Auszug</span></label>
+            <select id="f_year"></select>
+          </div>
           <div class="field"><label>Kunden‑/Kontonummer <span class="desc">Swissquote</span></label><input id="f_client" placeholder="z.B. 123456"></div>
           <div class="field"><label>Depot‑Nr.</label><input id="f_depot" value="1"></div>
         </div>
@@ -78,12 +81,21 @@
           <label class="toggle"><input type="checkbox" id="t_metals" checked> Edelmetalle (Gold/XAU)</label>
         </div>
 
-        <div class="subhead">Umrechnungskurse in CHF <span class="desc" style="text-transform:none;font-weight:400"> (Schätzwerte – nur für die CHF‑Summen; die Steuersoftware rechnet mit der offiziellen Kursliste nach)</span></div>
+        <div class="subhead">Steuerwerte per 31.12.</div>
+        <div class="field" style="max-width:520px">
+          <select id="f_taxmode">
+            <option value="minimal" selected>Minimal – von der Steuersoftware (Kursliste) berechnen lassen (empfohlen)</option>
+            <option value="estimate">Schätzwerte (letzter Handelskurs) in den Auszug schreiben</option>
+          </select>
+          <span class="desc">Empfohlen: „Minimal“. Damit trägt Ihre kantonale Software die offiziellen Werte ein – so gibt es beim Import keine Summen‑Differenz. „Schätzwerte“ kann von Tools abgelehnt werden, die selbst nachrechnen.</span>
+        </div>
+
+        <div class="subhead">Umrechnungskurse in CHF <span class="desc" style="text-transform:none;font-weight:400"> (nur für das Dashboard &amp; optionale Schätzwerte; die Steuersoftware rechnet mit der offiziellen Kursliste nach)</span></div>
         <div class="grid3" id="fxGrid"></div>
 
         <div class="banner warn" style="margin-top:18px">
           <span class="ico">⚠️</span>
-          <div>Das CSV enthält nur Transaktionen – <strong>keine Anfangsbestände vor dem Steuerjahr und keine Marktwerte per 31.12.</strong> Bestände und Erträge werden exakt rekonstruiert; die CHF‑<em>Steuerwerte</em> sind Schätzungen (letzter Handelskurs) und mit <code>kursliste=true</code> markiert, damit Ihre Steuersoftware sie mit den offiziellen Werten überschreibt.</div>
+          <div>Das CSV enthält nur Transaktionen – <strong>keine Anfangsbestände vor dem Steuerjahr und keine Marktwerte per 31.12.</strong> Bestände und Erträge werden exakt rekonstruiert. Die <em>Steuerwerte per 31.12.</em> werden standardmässig Ihrer Steuersoftware überlassen (Modus „Minimal“, <code>undefined</code>/Kursliste) – so entsteht beim Import keine Summen‑Differenz.</div>
         </div>
 
         <div class="actions">

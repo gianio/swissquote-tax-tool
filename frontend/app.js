@@ -92,7 +92,16 @@ $("analyzeBtn").addEventListener("click", async () => {
 
 // ---- Populate the questions form -----------------------------------------
 function populateForm(data) {
-  $("f_year").value = data.tax_year;
+  // Year selector: a range around the detected year, defaulting to it.
+  const y = data.tax_year;
+  const years = [];
+  for (let yr = y + 1; yr >= y - 6; yr--) years.push(yr);
+  const yearSel = $("f_year");
+  yearSel.innerHTML = years
+    .map((yr) => `<option value="${yr}"${yr === y ? " selected" : ""}>${yr}</option>`)
+    .join("");
+  yearSel.value = String(y);
+
   const canton = $("f_canton");
   canton.innerHTML = data.cantons.map((c) => `<option value="${c}">${c}</option>`).join("");
   canton.value = "ZH";
@@ -129,6 +138,7 @@ function collectConfig() {
     include_options: $("t_options").checked,
     include_crypto: $("t_crypto").checked,
     include_metals: $("t_metals").checked,
+    tax_value_mode: $("f_taxmode").value,
     fx_rates: fx,
   };
 }

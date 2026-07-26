@@ -51,6 +51,17 @@ class StatementConfig:
     include_crypto: bool = True
     include_metals: bool = True
 
+    # How year-end tax values are written into the eCH-0196 statement:
+    #   "minimal"  – leave the value for the tax software's official Kursliste
+    #                (undefined=true, totalTaxValue=0). Imports cleanly because
+    #                nothing we declare can disagree with the software's own
+    #                valuation. This is the safe default.
+    #   "estimate" – also write our own last-price × FX estimate into the XML.
+    #                Handy for a self-contained document, but cantonal importers
+    #                that recompute values (and drop unlistable positions such as
+    #                gold/crypto) will reject the mismatching total.
+    tax_value_mode: str = "minimal"
+
     fx_rates: Dict[str, Decimal] = field(default_factory=lambda: dict(DEFAULT_FX_RATES))
 
     @property

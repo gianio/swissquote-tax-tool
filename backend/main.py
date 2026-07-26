@@ -91,6 +91,7 @@ def _config_from_form(config_json: Optional[str], tax_year: int) -> StatementCon
         include_options=bool(payload.get("include_options", True)),
         include_crypto=bool(payload.get("include_crypto", True)),
         include_metals=bool(payload.get("include_metals", True)),
+        tax_value_mode="estimate" if payload.get("tax_value_mode") == "estimate" else "minimal",
         fx_rates=fx_rates,
     )
 

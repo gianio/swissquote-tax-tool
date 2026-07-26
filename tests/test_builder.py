@@ -77,3 +77,31 @@ def test_barcode_pdf_renders(built):
     pdf = render_pdf(statement)
     assert pdf.startswith(b"%PDF")
     assert len(pdf) > 20_000  # a multi-page statement with barcode pages
+
+
+def test_minimal_mode_leaves_tax_values_undefined():
+    """Default (minimal) mode must not declare a tax-value total the software
+    would recompute and reject – values are left undefined for the Kursliste."""
+    result = classify(parse_transactions(SAMPLE_CSV.read_bytes()))
+    cfg = StatementConfig(tax_year=2025, canton="GR", client_number="1")  # minimal default
+    statement, report = build_statement(result, cfg)
+    assert cfg.tax_value_mode == "minimal"
+    assert statement.totalTaxValue == Decimal("0")
+    assert statement.listOfSecurities.totalTaxValue == Decimal("0")
+    for depot in statement.listOfSecurities.depot:
+        for sec in depot.security:
+            if sec.taxValue is not None:
+                assert sec.taxValue.undefined is True
+                assert sec.taxValue.value is None
+    assert validate_ech0196(statement.to_xml_bytes()).valid
+
+
+def test_estimate_mode_total_matches_sum_of_positions():
+    """Estimate mode must stay self-consistent: declared total == sum written."""
+    import re
+    result = classify(parse_transactions(SAMPLE_CSV.read_bytes()))
+    cfg = StatementConfig(tax_year=2025, client_number="1", tax_value_mode="estimate")
+    statement, _ = build_statement(result, cfg)
+    xml = statement.to_xml_bytes().decode()
+    values = [Decimal(v) for v in re.findall(r'<taxValue[^>]*\bvalue="([-0-9.]+)"', xml)]
+    assert statement.totalTaxValue == sum(values, Decimal("0"))

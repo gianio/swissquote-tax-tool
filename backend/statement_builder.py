@@ -213,28 +213,45 @@ def _build_security(
         )
     )
 
-    # --- Year-end tax value (estimated) ------------------------------------
+    # --- Year-end tax value ------------------------------------------------
+    # The last trade price is a rough proxy for the 31.12 market price; we always
+    # compute it for the dashboard, but only write it into the XML in "estimate"
+    # mode. In "minimal" mode (default) the value is left undefined so the tax
+    # software fills it from the official Kursliste – this is what makes the
+    # import self-consistent (see StatementConfig.tax_value_mode).
     last_price = _last_trade_price(inst)
+    estimate_chf = Decimal(0)
+    if inst.closing_quantity != 0 and last_price is not None:
+        estimate_chf = _money(inst.closing_quantity * last_price * rate) or Decimal(0)
+
+    minimal = config.tax_value_mode != "estimate"
     value_is_estimate = False
     tax_value_chf = Decimal(0)
     tax_value = None
     if inst.closing_quantity != 0:
-        balance_native = None
-        if last_price is not None:
-            balance_native = _money(inst.closing_quantity * last_price)
-            tax_value_chf = _money(inst.closing_quantity * last_price * rate) or Decimal(0)
-            value_is_estimate = True
-        tax_value = SecurityTaxValue(
-            referenceDate=config.period_to,
-            quotationType=quotation,
-            quantity=inst.closing_quantity,
-            balanceCurrency=inst.currency,
-            unitPrice=last_price,
-            balance=balance_native,
-            exchangeRate=rate,
-            value=tax_value_chf if value_is_estimate else None,
-            kursliste=True,   # tell the tax software to fill the official value
-        )
+        if minimal:
+            tax_value = SecurityTaxValue(
+                referenceDate=config.period_to,
+                quotationType=quotation,
+                quantity=inst.closing_quantity,
+                balanceCurrency=inst.currency,
+                kursliste=True,      # value comes from the official Kursliste …
+                undefined=True,      # … and is explicitly undefined in this file
+            )
+        else:
+            value_is_estimate = last_price is not None
+            tax_value_chf = estimate_chf if value_is_estimate else Decimal(0)
+            tax_value = SecurityTaxValue(
+                referenceDate=config.period_to,
+                quotationType=quotation,
+                quantity=inst.closing_quantity,
+                balanceCurrency=inst.currency,
+                unitPrice=last_price,
+                balance=_money(inst.closing_quantity * last_price) if last_price else None,
+                exchangeRate=rate,
+                value=tax_value_chf if value_is_estimate else None,
+                kursliste=True,
+            )
 
     # --- Income (dividends / distributions) --------------------------------
     payments: List[SecurityPayment] = []
@@ -282,6 +299,7 @@ def _build_security(
         taxValue=tax_value,
     )
 
+    # The header total only carries values actually written into the XML.
     report.total_tax_value_chf += tax_value_chf
     report.included.append(
         PositionReport(
@@ -291,9 +309,9 @@ def _build_security(
             currency=inst.currency,
             closing_quantity=inst.closing_quantity,
             opening_inferred=inst.opening_inferred,
-            tax_value_chf=tax_value_chf,
+            tax_value_chf=estimate_chf,      # always the estimate, for the dashboard
             gross_income_chf=gross_income_chf,
-            value_is_estimate=value_is_estimate,
+            value_is_estimate=minimal or value_is_estimate,
         )
     )
     return security
@@ -329,7 +347,20 @@ def _build_metals_security(
         SecurityStock(referenceDate=config.period_to, mutation=False, quotationType="PIECE",
                       quantity=net, balanceCurrency="XAU", name="Bestand 31.12.")
     )
-    tax_value_chf = _money(net * rate) or Decimal(0)
+    estimate_chf = _money(net * rate) or Decimal(0)
+    minimal = config.tax_value_mode != "estimate"
+    if minimal:
+        tax_value = SecurityTaxValue(
+            referenceDate=config.period_to, quotationType="PIECE", quantity=net,
+            balanceCurrency="XAU", kursliste=True, undefined=True,
+        )
+        value_in_xml = Decimal(0)
+    else:
+        tax_value = SecurityTaxValue(
+            referenceDate=config.period_to, quotationType="PIECE", quantity=net,
+            balanceCurrency="XAU", exchangeRate=rate, value=estimate_chf, kursliste=True,
+        )
+        value_in_xml = estimate_chf
     security = Security(
         positionId=position_id,
         country="XX",
@@ -339,15 +370,12 @@ def _build_metals_security(
         securityType="COINBULL.GOLD",
         securityName="Gold (XAU)",
         stock=stock,
-        taxValue=SecurityTaxValue(
-            referenceDate=config.period_to, quotationType="PIECE", quantity=net,
-            balanceCurrency="XAU", exchangeRate=rate, value=tax_value_chf, kursliste=True,
-        ),
+        taxValue=tax_value,
     )
-    report.total_tax_value_chf += tax_value_chf
+    report.total_tax_value_chf += value_in_xml
     report.included.append(
         PositionReport("Gold (XAU)", None, "COINBULL", "XAU", net, False,
-                       tax_value_chf, Decimal(0), True)
+                       estimate_chf, Decimal(0), True)
     )
     return security
 

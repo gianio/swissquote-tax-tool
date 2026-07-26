@@ -98,10 +98,18 @@ document. Specifically:
     *inferred* whenever a sale exceeds the in‑year purchases (flagged
     “rekonstr.” in the dashboard). Positions you held all year but never traded
     do **not** appear at all — add them manually if needed.
-  - **Year‑end tax values (Steuerwert per 31.12)** are *estimated* from the last
-    trade price × your FX rate and marked `kursliste="true"`, so your tax
-    software replaces them with the official Kursliste values. Treat every
-    “Schätz.” figure as indicative.
+  - **Year‑end tax values (Steuerwert per 31.12)** are left to the tax software
+    by default (**"Minimal" mode**): each position is written with
+    `undefined="true"` / `kursliste="true"` and the statement's `totalTaxValue`
+    is `0`, so your cantonal software fills the official Kursliste values and the
+    import stays self‑consistent. (An optional **"estimate"** mode instead writes
+    a last‑price × FX estimate into the XML — convenient as a standalone
+    document, but importers that recompute values and drop unlistable positions
+    such as gold/crypto will reject the mismatching total, e.g. GR softax:
+    *"Die importierten Summen stimmen nicht … überein"*.) The dashboard always
+    shows the estimate for your own overview regardless of mode.
+  - **Pick the tax year** in the form (dropdown, pre‑selected to the year
+    detected in the CSV); it drives the period, `taxPeriod` and the statement id.
 - **FX rates are estimates.** The CHF totals use the editable rates you enter
   (pre‑filled with rough year‑end values). Per‑position amounts are kept in the
   original currency; the tax software recomputes CHF from official rates.
