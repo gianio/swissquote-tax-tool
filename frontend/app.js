@@ -106,6 +106,12 @@ function populateForm(data) {
   canton.innerHTML = data.cantons.map((c) => `<option value="${c}">${c}</option>`).join("");
   canton.value = "ZH";
 
+  // Prefill identity from the Kontoauszug PDF when available.
+  const acc = data.account || {};
+  if (acc.first_name) $("f_first").value = acc.first_name;
+  if (acc.last_name) $("f_last").value = acc.last_name;
+  if (acc.customer_number) $("f_client").value = acc.customer_number;
+
   const grid = $("fxGrid");
   grid.innerHTML = "";
   data.currencies
@@ -306,10 +312,30 @@ function dashboardHtml(s, { preview }) {
     (preview ? "" : cashNote(s)) +
     "</div>";
 
+  const cashCard = cashBalancesCard(s.cash_balances, s.totals.cash_total_chf);
   const divTable = dividendTable(d.top);
   const posTable = preview ? "" : positionsTable(s.positions);
 
-  return kpis + summaryCard + charts + divTable + posTable;
+  return kpis + summaryCard + cashCard + charts + divTable + posTable;
+}
+
+function cashBalancesCard(balances, totalChf) {
+  if (!balances || !balances.length) return "";
+  const rows = balances
+    .map(
+      (b) =>
+        `<tr><td>${esc(b.currency)}</td><td class=num>${num(b.amount, 2)} ${esc(b.currency)}</td>
+         <td class=num>${chf(b.amount_chf)}</td></tr>`
+    )
+    .join("");
+  return (
+    '<div class="card"><h2>Kontostände per 31.12. (Konten)</h2>' +
+    '<p class="hint">Aus dem Kontoauszug‑PDF – als Barvermögen (Konten) im Steuerauszug enthalten.</p>' +
+    '<div class="table-wrap"><table><thead><tr><th>Währung</th><th class=num>Saldo</th><th class=num>Wert CHF</th></tr></thead><tbody>' +
+    rows +
+    `<tr><td><strong>Total</strong></td><td></td><td class=num><strong>${chf(totalChf)}</strong></td></tr>` +
+    "</tbody></table></div></div>"
+  );
 }
 
 function miniStat(label, value) {

@@ -23,7 +23,8 @@ from fastapi.staticfiles import StaticFiles
 
 from .classifier import classify
 from .config import DEFAULT_FX_RATES, VALID_CANTONS, StatementConfig
-from .csv_parser import CsvParseError, infer_tax_year, parse_transactions
+from .csv_parser import CsvParseError, infer_tax_year
+from .input_parser import parse_input, split_name
 from .pdf_render import PdfRenderError, render_pdf
 from .statement_builder import build_statement
 from .summary import build_summary
@@ -98,21 +99,29 @@ def _config_from_form(config_json: Optional[str], tax_year: int) -> StatementCon
 
 @app.post("/api/analyze")
 async def analyze(file: UploadFile = File(...)) -> JSONResponse:
-    """Parse the CSV and return a preview summary + detected fields."""
+    """Parse a CSV or Kontoauszug PDF and return a preview + detected fields."""
     data = _read_upload(file)
     try:
-        transactions = parse_transactions(data)
+        parsed = parse_input(data, file.filename)
     except CsvParseError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
 
+    transactions = parsed.transactions
     tax_year = infer_tax_year(transactions)
     result = classify(transactions)
     currencies = _currencies_in(result)
+    # Cash-balance currencies (e.g. CAD/DKK) also need an FX rate for the totals.
+    for b in parsed.cash_balances:
+        if b.currency and b.currency not in currencies:
+            currencies.append(b.currency)
+    currencies = sorted(set(currencies))
     preview_config = StatementConfig(tax_year=tax_year)
-    summary = build_summary(result, preview_config)
+    summary = build_summary(result, preview_config, cash_balances=parsed.cash_balances)
 
+    first, last = split_name(parsed.account.holder_name)
     return JSONResponse({
         "ok": True,
+        "source": parsed.source,
         "tax_year": tax_year,
         "transaction_count": len(transactions),
         "currencies": currencies,
@@ -120,6 +129,15 @@ async def analyze(file: UploadFile = File(...)) -> JSONResponse:
         "cantons": VALID_CANTONS,
         "summary": summary,
         "warnings": result.warnings,
+        "account": {
+            "first_name": first,
+            "last_name": last,
+            "customer_number": parsed.account.customer_number,
+            "iban": parsed.account.iban,
+        },
+        "cash_balances": [
+            {"currency": b.currency, "amount": float(b.amount)} for b in parsed.cash_balances
+        ],
     })
 
 
@@ -128,18 +146,18 @@ async def generate(
     file: UploadFile = File(...),
     config: Optional[str] = Form(default=None),
 ) -> JSONResponse:
-    """Build the eCH-0196 statement from the CSV + the user's answers."""
+    """Build the eCH-0196 statement from the upload + the user's answers."""
     data = _read_upload(file)
     try:
-        transactions = parse_transactions(data)
+        parsed = parse_input(data, file.filename)
     except CsvParseError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
 
-    tax_year = infer_tax_year(transactions)
+    tax_year = infer_tax_year(parsed.transactions)
     cfg = _config_from_form(config, tax_year)
-    result = classify(transactions, default_country=cfg.country)
-    summary = build_summary(result, cfg)
-    statement, report = build_statement(result, cfg)
+    result = classify(parsed.transactions, default_country=cfg.country)
+    summary = build_summary(result, cfg, cash_balances=parsed.cash_balances)
+    statement, report = build_statement(result, cfg, cash_balances=parsed.cash_balances)
 
     xml_bytes = statement.to_xml_bytes()
     validation = validate_ech0196(xml_bytes)
@@ -177,6 +195,7 @@ async def generate(
                 "withholding_tax_claim_chf": float(report.total_withholding_tax_claim_chf),
                 "foreign_withholding_chf": float(report.total_foreign_withholding_chf),
                 "bank_interest_chf": float(report.total_bank_interest_chf),
+                "cash_tax_value_chf": float(report.total_cash_tax_value_chf),
             },
         },
         "summary": summary,
@@ -191,14 +210,14 @@ async def pdf(
     """Render the official eCH-0196 PDF (incl. PDF417 barcodes) for download."""
     data = _read_upload(file)
     try:
-        transactions = parse_transactions(data)
+        parsed = parse_input(data, file.filename)
     except CsvParseError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
 
-    tax_year = infer_tax_year(transactions)
+    tax_year = infer_tax_year(parsed.transactions)
     cfg = _config_from_form(config, tax_year)
-    result = classify(transactions, default_country=cfg.country)
-    statement, _ = build_statement(result, cfg)
+    result = classify(parsed.transactions, default_country=cfg.country)
+    statement, _ = build_statement(result, cfg, cash_balances=parsed.cash_balances)
 
     try:
         pdf_bytes = render_pdf(statement, language="de")

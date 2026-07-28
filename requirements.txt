@@ -6,6 +6,9 @@ python-multipart>=0.0.9
 # XML handling / validation (also pulled in by opensteuerauszug)
 lxml>=5.0
 
+# Reading the Swissquote Kontoauszug PDF (coordinate-based table extraction)
+pymupdf>=1.24
+
 # eCH-0196 e-Steuerauszug data models, XML serialisation, XSD schemas and the
 # reportlab-based PDF renderer (statement layout + PDF417 barcode pages).
 # Published to PyPI only as a placeholder, so we install the working code
