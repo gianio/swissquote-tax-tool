@@ -29,14 +29,14 @@
     <!-- STEP 1: UPLOAD -->
     <section id="section-upload">
       <div class="card">
-        <h2>1. Swissquote‑Transaktions‑CSV hochladen</h2>
-        <p class="hint">Exportieren Sie in Swissquote unter <em>Transaktionen → Export (CSV)</em> das gewünschte Steuerjahr. Die Datei wird nur lokal auf diesem Server verarbeitet und nirgends gespeichert.</p>
+        <h2>1. Swissquote‑Datei hochladen</h2>
+        <p class="hint">Am besten den <strong>Kontoauszug‑PDF</strong> (enthält zusätzlich die Kontostände pro Währung und Ihre Personalien). Alternativ der Transaktions‑CSV‑Export. Die Datei wird nur lokal verarbeitet und nirgends gespeichert.</p>
         <div class="dropzone" id="dropzone">
           <div class="big">Datei hierher ziehen oder klicken</div>
-          <div class="small">Format: <code>transactionsfrom…csv</code> (Semikolon‑getrennt)</div>
+          <div class="small">Kontoauszug‑<code>PDF</code> (empfohlen) oder Transaktions‑<code>CSV</code></div>
           <div class="file" id="fileName" hidden></div>
         </div>
-        <input type="file" id="fileInput" accept=".csv,text/csv">
+        <input type="file" id="fileInput" accept=".csv,.pdf,text/csv,application/pdf">
         <div class="actions">
           <button class="btn primary" id="analyzeBtn" type="button" disabled>Analysieren</button>
         </div>

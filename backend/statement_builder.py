@@ -28,6 +28,7 @@ from opensteuerauszug.model.ech0196 import (
     BankAccount,
     BankAccountName,
     BankAccountPayment,
+    BankAccountTaxValue,
     Client,
     ClientNumber,
     Depot,
@@ -41,6 +42,7 @@ from opensteuerauszug.model.ech0196 import (
     SecurityStock,
     SecurityTaxValue,
     TaxStatement,
+    ValorNumber,
 )
 
 from .classifier import ClassificationResult, Instrument, Movement, chronological
@@ -62,6 +64,25 @@ def _isin_or_none(inst: Instrument):
         except Exception:  # pragma: no cover - defensive
             return None
     return None
+
+
+def _valor_from_isin(isin: Optional[str]) -> Optional[int]:
+    """Derive the Swiss Valorennummer from a Swiss ISIN.
+
+    A Swiss ISIN is ``CH`` + 9 digits (the zero-padded valor) + 1 check digit,
+    so ``int(isin[2:11])`` recovers the valor. softax matches an imported
+    security onto an existing position primarily by this number, so emitting it
+    lets the generated statement bind onto titles already entered by hand.
+    Foreign ISINs have no derivable valor (softax matches those on ISIN).
+    """
+    if not isin or len(isin) != 12 or not isin.startswith("CH"):
+        return None
+    digits = isin[2:11]
+    if not digits.isdigit():
+        return None
+    valor = int(digits)
+    # eCH-0196 valorNumber must be in [100, 999999999999].
+    return ValorNumber(valor) if 100 <= valor <= 999_999_999_999 else None
 
 
 @dataclass
@@ -88,26 +109,45 @@ class BuildReport:
     total_withholding_tax_claim_chf: Decimal = Decimal(0)
     total_foreign_withholding_chf: Decimal = Decimal(0)
     total_bank_interest_chf: Decimal = Decimal(0)
+    total_cash_tax_value_chf: Decimal = Decimal(0)
 
 
 def _build_bank_accounts(
-    result: ClassificationResult, config: StatementConfig, report: BuildReport
+    result: ClassificationResult,
+    config: StatementConfig,
+    report: BuildReport,
+    cash_balances: Optional[List] = None,
 ) -> Optional[ListOfBankAccounts]:
-    """Build one bank account per currency that received interest on deposits."""
-    if not result.cash_interest:
-        return None
+    """Build one bank account per currency.
 
-    by_currency: dict[str, List] = {}
+    Combines two sources: interest credited during the year (from the
+    transactions) and the year-end cash balance per currency (the Kontostand,
+    only available from the Kontoauszug PDF). Cash balances are exact, so their
+    CHF tax value is written directly – no Kursliste needed.
+    """
+    interest_by_ccy: dict[str, List] = {}
     for inc in result.cash_interest:
-        by_currency.setdefault(inc.currency, []).append(inc)
+        interest_by_ccy.setdefault(inc.currency, []).append(inc)
+
+    # Year-end balances, excluding gold (XAU) which is a COINBULL security.
+    balance_by_ccy: dict[str, Decimal] = {}
+    for bal in (cash_balances or []):
+        if bal.currency == "XAU":
+            continue
+        balance_by_ccy[bal.currency] = bal.amount
+
+    currencies = sorted(set(interest_by_ccy) | set(balance_by_ccy))
+    if not currencies:
+        return None
 
     accounts: List[BankAccount] = []
     total_a = Decimal(0)
-    for currency, incomes in sorted(by_currency.items()):
+    total_cash_chf = Decimal(0)
+    for currency in currencies:
         rate = config.rate(currency)
         payments: List[BankAccountPayment] = []
         acc_gross = Decimal(0)
-        for inc in sorted(incomes, key=lambda i: (i.date, i.source_row)):
+        for inc in sorted(interest_by_ccy.get(currency, []), key=lambda i: (i.date, i.source_row)):
             gross_chf = _money(inc.gross * rate) or Decimal(0)
             acc_gross += gross_chf
             payments.append(
@@ -123,13 +163,30 @@ def _build_bank_accounts(
                 )
             )
         total_a += acc_gross
+
+        tax_value = None
+        acc_tax_chf = Decimal(0)
+        if currency in balance_by_ccy:
+            balance = balance_by_ccy[currency]
+            acc_tax_chf = _money(balance * rate) or Decimal(0)
+            total_cash_chf += acc_tax_chf
+            tax_value = BankAccountTaxValue(
+                referenceDate=config.period_to,
+                balanceCurrency=currency,
+                balance=_money(balance),
+                exchangeRate=rate,
+                value=acc_tax_chf,
+                name=f"Saldo {currency} 31.12.",
+            )
+
         accounts.append(
             BankAccount(
                 bankAccountName=BankAccountName(f"Swissquote {currency}"),
                 bankAccountCurrency=currency,
                 bankAccountCountry="CH",
+                taxValue=tax_value,
                 payment=payments,
-                totalTaxValue=Decimal(0),
+                totalTaxValue=acc_tax_chf,
                 totalGrossRevenueA=acc_gross,
                 totalGrossRevenueB=Decimal(0),
                 totalWithHoldingTaxClaim=Decimal(0),
@@ -138,9 +195,11 @@ def _build_bank_accounts(
 
     report.total_bank_interest_chf = total_a
     report.total_gross_revenue_a_chf += total_a
+    report.total_cash_tax_value_chf = total_cash_chf
+    report.total_tax_value_chf += total_cash_chf
     return ListOfBankAccounts(
         bankAccount=accounts,
-        totalTaxValue=Decimal(0),
+        totalTaxValue=_money(total_cash_chf),
         totalGrossRevenueA=_money(total_a),
         totalGrossRevenueB=Decimal(0),
         totalWithHoldingTaxClaim=Decimal(0),
@@ -293,6 +352,7 @@ def _build_security(
         securityCategory=inst.category,
         securityName=inst.name or inst.symbol or "Unknown",
         isin=_isin_or_none(inst),
+        valorNumber=_valor_from_isin(inst.isin),
         symbol=inst.symbol or None,
         stock=stock,
         payment=payments,
@@ -380,8 +440,12 @@ def _build_metals_security(
     return security
 
 
-def build_statement(result: ClassificationResult, config: StatementConfig):
-    """Build a validated eCH-0196 :class:`TaxStatement` and a :class:`BuildReport`."""
+def build_statement(result: ClassificationResult, config: StatementConfig, cash_balances=None):
+    """Build a validated eCH-0196 :class:`TaxStatement` and a :class:`BuildReport`.
+
+    ``cash_balances`` (optional, from the Kontoauszug PDF) is a list of
+    ``CashBalance`` objects giving the year-end balance per currency.
+    """
     report = BuildReport(warnings=list(result.warnings))
 
     securities: List[Security] = []
@@ -417,8 +481,8 @@ def build_statement(result: ClassificationResult, config: StatementConfig):
         totalGrossRevenueConversion=Decimal(0),
     )
 
-    # Bank-account interest (adds to the statement-level gross revenue A total).
-    list_of_bank_accounts = _build_bank_accounts(result, config, report)
+    # Bank accounts: interest (revenue A) plus year-end cash balances (tax value).
+    list_of_bank_accounts = _build_bank_accounts(result, config, report, cash_balances)
 
     institution = Institution(name=config.institution_name)
     if config.institution_lei:

@@ -45,17 +45,40 @@ pytest
 
 ---
 
+## Input: CSV **or** Kontoauszug PDF
+
+You can upload either Swissquote export:
+
+- **Kontoauszug PDF** (recommended) — contains the same transactions **plus** the
+  per‑currency **year‑end cash balances** (Kontostände) and your **identity**
+  (name, IBAN, customer number), which are used to fill the account form and to
+  add your cash accounts to the tax statement.
+- **Transactions CSV** — transactions only.
+
+The format is auto‑detected. Cash balances become eCH‑0196 `bankAccount` tax
+values; the PDF is parsed by word coordinates (column layout) for robustness.
+
+### Binding onto positions already entered in softax
+
+For Swiss securities the **Valorennummer** is derived from the ISIN (e.g. HOLCIM
+`CH0012214059` → valor `1221405`) and written into the statement, so softax
+matches the import onto an existing position by valor instead of creating a
+duplicate. Foreign titles are matched by ISIN.
+
 ## How it works
 
 ```
-CSV bytes ─▶ csv_parser ─▶ classifier ─▶ statement_builder ─▶ eCH‑0196 XML
-                              │                                    │
-                              └────────▶ summary ─▶ dashboard      └▶ XSD validation
+CSV / PDF ─▶ input_parser ─▶ classifier ─▶ statement_builder ─▶ eCH‑0196 XML + PDF
+                 │                              │
+                 ├─ cash balances ──────────────┤ (bankAccount tax values)
+                 └──────▶ summary ─▶ dashboard   └▶ XSD validation
 ```
 
 | Module | Responsibility |
 |--------|----------------|
+| `backend/input_parser.py` | Detect CSV vs PDF and normalise to one input |
 | `backend/csv_parser.py` | Decode Latin‑1 / `;`‑separated export into typed `Transaction`s |
+| `backend/pdf_parser.py` | Read the Kontoauszug PDF: transactions, cash balances, identity |
 | `backend/classifier.py` | Bucket transactions per security, reconstruct year‑end positions |
 | `backend/statement_builder.py` | Build the eCH‑0196 `TaxStatement` (reuses `opensteuerauszug` models) |
 | `backend/summary.py` | Aggregate the dashboard figures |

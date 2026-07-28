@@ -27,7 +27,7 @@ def _month_key(d) -> str:
     return f"{d.year:04d}-{d.month:02d}"
 
 
-def build_summary(result: ClassificationResult, config: StatementConfig) -> dict:
+def build_summary(result: ClassificationResult, config: StatementConfig, cash_balances=None) -> dict:
     rate = config.rate
 
     # --- Zugänge / Abgänge (purchases and disposals of securities) ---------
@@ -140,13 +140,29 @@ def build_summary(result: ClassificationResult, config: StatementConfig) -> dict
             for c, v in sorted(d.items(), key=lambda kv: kv[1] * rate(kv[0]), reverse=True)
         ]
 
+    # --- Year-end cash balances per currency (from the Kontoauszug PDF) -----
+    cash_list: List[dict] = []
+    cash_total_chf = Decimal(0)
+    for bal in (cash_balances or []):
+        if bal.currency == "XAU":
+            continue  # gold is shown as a precious-metal position, not cash
+        chf = bal.amount * rate(bal.currency)
+        cash_total_chf += chf
+        cash_list.append({
+            "currency": bal.currency,
+            "amount": float(bal.amount),
+            "amount_chf": _f(chf),
+        })
+
     return {
         "tax_year": config.tax_year,
         "totals": {
             "positions": len([p for p in positions if p["closing_quantity"] != 0]),
             "instruments_traded": len(result.instruments),
             "estimated_portfolio_chf": _f(sum(category_value.values(), Decimal(0))),
+            "cash_total_chf": _f(cash_total_chf),
         },
+        "cash_balances": cash_list,
         "zugaenge": {
             "count": buy_count,
             "total_chf": _f(buy_chf),
