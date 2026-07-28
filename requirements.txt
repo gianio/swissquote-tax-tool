@@ -1,0 +1,18 @@
+# Web framework
+fastapi>=0.110
+uvicorn[standard]>=0.29
+python-multipart>=0.0.9
+
+# XML handling / validation (also pulled in by opensteuerauszug)
+lxml>=5.0
+
+# eCH-0196 e-Steuerauszug data models, XML serialisation, XSD schemas and the
+# reportlab-based PDF renderer (statement layout + PDF417 barcode pages).
+# Published to PyPI only as a placeholder, so we install the working code
+# straight from the upstream GitHub repository.
+opensteuerauszug @ git+https://github.com/vroonhof/opensteuerauszug.git@main
+
+# eCH-0196-compliant macro PDF417 encoder. The upstream renderer requires this
+# patched fork (correct file-name compaction) to produce scannable barcodes;
+# it overrides the stock pdf417gen pulled in by opensteuerauszug.
+pdf417gen @ git+https://github.com/vroonhof/pdf417-py.git

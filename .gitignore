@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+
+# Local environment
+.env
+
+# Generated / uploaded data – never commit real financial exports
+*.local.csv
+/uploads/
+/out/
+generated_*.xml
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
