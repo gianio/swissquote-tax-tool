@@ -146,7 +146,60 @@ function collectConfig() {
     include_metals: $("t_metals").checked,
     tax_value_mode: $("f_taxmode").value,
     fx_rates: fx,
+    opening_positions: collectCarryForward(),
   };
+}
+
+// ---- Carry-forward (previous positions) ----------------------------------
+$("cfBtn").addEventListener("click", () => $("cfInput").click());
+$("cfInput").addEventListener("change", async () => {
+  const file = $("cfInput").files[0];
+  if (!file) return;
+  $("cfStatus").textContent = "Lese Positionen …";
+  try {
+    const fd = new FormData();
+    fd.append("file", file);
+    const res = await fetch("/api/parse-carryforward", { method: "POST", body: fd });
+    const data = await res.json();
+    if (!res.ok || !data.ok) throw new Error(data.detail || "Konnte Datei nicht lesen.");
+    renderCarryTable(data.positions);
+    const withQty = data.positions.filter((p) => p.quantity !== "").length;
+    $("cfStatus").textContent = `✓ ${data.count} Positionen (${withQty} mit Bestand) – bitte prüfen.`;
+  } catch (e) {
+    $("cfStatus").textContent = "⚠ " + e.message;
+  }
+});
+
+function renderCarryTable(positions) {
+  if (!positions.length) { $("cfTableHost").innerHTML = ""; return; }
+  const rows = positions
+    .map(
+      (p, i) =>
+        `<tr>
+           <td><input class="cf-isin" value="${esc(p.isin)}" style="width:120px"></td>
+           <td title="${esc(p.name)}">${esc(p.name.length > 26 ? p.name.slice(0, 25) + "…" : p.name)}</td>
+           <td><input class="cf-valor" value="${esc(p.valor ?? "")}" style="width:96px" placeholder="—"></td>
+           <td><input class="cf-qty" value="${esc(p.quantity)}" style="width:80px" placeholder="Bestand 01.01."></td>
+         </tr>`
+    )
+    .join("");
+  $("cfTableHost").innerHTML =
+    '<div class="banner info" style="margin-bottom:8px"><span class="ico">↪</span><div>Anfangsbestand (01.01.) je Titel – aus der Datei vorausgefüllt. Bitte Menge/Valor prüfen; leere Bestände werden ignoriert.</div></div>' +
+    '<div class="table-wrap"><table><thead><tr><th>ISIN</th><th>Titel</th><th>Valor</th><th>Bestand 01.01.</th></tr></thead><tbody>' +
+    rows + "</tbody></table></div>";
+}
+
+function collectCarryForward() {
+  const host = $("cfTableHost");
+  if (!host || !host.querySelector("table")) return [];
+  const out = [];
+  host.querySelectorAll("tbody tr").forEach((tr) => {
+    const isin = tr.querySelector(".cf-isin").value.trim();
+    const valor = tr.querySelector(".cf-valor").value.trim();
+    const qty = tr.querySelector(".cf-qty").value.trim();
+    if (isin) out.push({ isin, valor: valor || null, quantity: qty || "" });
+  });
+  return out;
 }
 
 $("backBtn").addEventListener("click", () => showStep(1));
@@ -401,6 +454,12 @@ function positionsTable(positions) {
 function reportHtml(report) {
   if (!report) return "";
   let html = "";
+  if (report.carried_count) {
+    html +=
+      '<div class="banner ok" style="background:color-mix(in srgb,var(--good) 12%,transparent)"><span class="ico">↪</span><div><strong>' +
+      report.carried_count +
+      " Positionen aus dem Vorjahr weitergeführt.</strong> Anfangsbestände &amp; Valoren gesetzt – diese Titel binden in softax an die bestehenden Einträge.</div></div>";
+  }
   if (report.excluded && report.excluded.length) {
     html +=
       '<div class="banner warn"><span class="ico">⚠️</span><div><strong>Ausgeschlossene Positionen:</strong> ' +

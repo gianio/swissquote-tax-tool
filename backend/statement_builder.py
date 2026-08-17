@@ -85,6 +85,20 @@ def _valor_from_isin(isin: Optional[str]) -> Optional[int]:
     return ValorNumber(valor) if 100 <= valor <= 999_999_999_999 else None
 
 
+def _valor_override(inst) -> Optional[object]:
+    """Use a carried-forward valor (e.g. for a foreign title) if present,
+    otherwise derive it from a Swiss ISIN."""
+    v = getattr(inst, "valor_override", None)
+    if v is not None:
+        try:
+            iv = int(v)
+            if 100 <= iv <= 999_999_999_999:
+                return ValorNumber(iv)
+        except (TypeError, ValueError):
+            pass
+    return _valor_from_isin(inst.isin)
+
+
 @dataclass
 class PositionReport:
     name: str
@@ -110,6 +124,7 @@ class BuildReport:
     total_foreign_withholding_chf: Decimal = Decimal(0)
     total_bank_interest_chf: Decimal = Decimal(0)
     total_cash_tax_value_chf: Decimal = Decimal(0)
+    carried_count: int = 0
 
 
 def _build_bank_accounts(
@@ -245,7 +260,10 @@ def _build_security(
             quotationType=quotation,
             quantity=inst.opening_quantity,
             balanceCurrency=inst.currency,
-            name="Bestand 01.01." + ("  (rekonstruiert)" if inst.opening_inferred else ""),
+            name="Bestand 01.01." + (
+                "  (Vorjahr)" if getattr(inst, "carried", False)
+                else ("  (rekonstruiert)" if inst.opening_inferred else "")
+            ),
         )
     ]
     for m in chronological(inst.movements + inst.corporate_actions):
@@ -352,7 +370,7 @@ def _build_security(
         securityCategory=inst.category,
         securityName=inst.name or inst.symbol or "Unknown",
         isin=_isin_or_none(inst),
-        valorNumber=_valor_from_isin(inst.isin),
+        valorNumber=_valor_override(inst),
         symbol=inst.symbol or None,
         stock=stock,
         payment=payments,
@@ -440,13 +458,56 @@ def _build_metals_security(
     return security
 
 
-def build_statement(result: ClassificationResult, config: StatementConfig, cash_balances=None):
+def _apply_carry_forward(result: ClassificationResult, opening_positions) -> int:
+    """Override inferred opening balances with carried-forward positions.
+
+    Matches by ISIN. Sets the opening quantity to last year's closing (so
+    softax reconciles ``Anfangsbestand == Endbestand`` and binds onto the
+    existing position) and overrides the valor when supplied (lets foreign
+    titles bind too). Returns how many positions were carried.
+    """
+    if not opening_positions:
+        return 0
+    cf = {}
+    for p in opening_positions:
+        isin = (p.get("isin") if isinstance(p, dict) else getattr(p, "isin", None)) or ""
+        if isin:
+            cf[isin] = p
+    carried = 0
+    for inst in result.instruments:
+        p = cf.get(inst.isin)
+        if not p:
+            continue
+        get = (lambda k: p.get(k)) if isinstance(p, dict) else (lambda k: getattr(p, k, None))
+        qty = get("quantity")
+        if qty is not None:
+            qty = Decimal(str(qty))
+            running = inst.closing_quantity - inst.opening_quantity
+            inst.opening_quantity = qty
+            inst.closing_quantity = qty + running
+            inst.opening_inferred = False
+            inst.carried = True
+            carried += 1
+        valor = get("valor")
+        if valor:
+            try:
+                inst.valor_override = int(valor)
+            except (TypeError, ValueError):
+                pass
+    return carried
+
+
+def build_statement(result: ClassificationResult, config: StatementConfig,
+                    cash_balances=None, opening_positions=None):
     """Build a validated eCH-0196 :class:`TaxStatement` and a :class:`BuildReport`.
 
     ``cash_balances`` (optional, from the Kontoauszug PDF) is a list of
     ``CashBalance`` objects giving the year-end balance per currency.
+    ``opening_positions`` (optional) carries last year's holdings forward so the
+    statement binds onto positions already listed in the tax software.
     """
     report = BuildReport(warnings=list(result.warnings))
+    report.carried_count = _apply_carry_forward(result, opening_positions)
 
     securities: List[Security] = []
     position_id = 1
