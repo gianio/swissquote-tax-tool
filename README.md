@@ -65,6 +65,22 @@ For Swiss securities the **Valorennummer** is derived from the ISIN (e.g. HOLCIM
 matches the import onto an existing position by valor instead of creating a
 duplicate. Foreign titles are matched by ISIN.
 
+### Carry‑forward of last year's positions
+
+So that a title already listed in softax from last year is **continued instead
+of duplicated**, you can upload your previous positions (optional):
+
+- **Last year's eCH‑0196 XML** — exact: valor, ISIN and year‑end quantity per
+  title are read directly.
+- **A softax "Wertschriften‑ und Guthabenverzeichnis" PDF** — the positions are
+  extracted (ISIN, name, valor, year‑end Stückzahl) and shown in an **editable
+  review table** to confirm before generating.
+
+The carried quantities become this year's **`Anfangsbestand` (01.01.)** so
+softax reconciles `Anfangsbestand == Endbestand (last year)`, and any valor you
+supply (e.g. for a foreign title) is emitted so it binds. `backend/carryforward.py`
+handles both sources; ISIN check‑digit validation filters out IBAN look‑alikes.
+
 ## How it works
 
 ```

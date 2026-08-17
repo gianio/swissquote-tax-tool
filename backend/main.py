@@ -21,6 +21,7 @@ from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
+from .carryforward import parse_carry_forward
 from .classifier import classify
 from .config import DEFAULT_FX_RATES, VALID_CANTONS, StatementConfig
 from .csv_parser import CsvParseError, infer_tax_year
@@ -97,6 +98,29 @@ def _config_from_form(config_json: Optional[str], tax_year: int) -> StatementCon
     )
 
 
+def _opening_positions_from_form(config_json: Optional[str]) -> list:
+    """The reviewed carry-forward table, passed back inside the config JSON."""
+    if not config_json:
+        return []
+    try:
+        payload = json.loads(config_json)
+    except json.JSONDecodeError:
+        return []
+    out = []
+    for p in (payload.get("opening_positions") or []):
+        isin = (p.get("isin") or "").strip().upper()
+        if not isin:
+            continue
+        qty = p.get("quantity")
+        out.append({
+            "isin": isin,
+            "name": p.get("name") or "",
+            "valor": p.get("valor") or None,
+            "quantity": None if qty in (None, "", "-") else str(qty),
+        })
+    return out
+
+
 @app.post("/api/analyze")
 async def analyze(file: UploadFile = File(...)) -> JSONResponse:
     """Parse a CSV or Kontoauszug PDF and return a preview + detected fields."""
@@ -141,6 +165,30 @@ async def analyze(file: UploadFile = File(...)) -> JSONResponse:
     })
 
 
+@app.post("/api/parse-carryforward")
+async def parse_carryforward(file: UploadFile = File(...)) -> JSONResponse:
+    """Parse last year's eCH-0196 XML or a softax PDF into reviewable positions."""
+    data = _read_upload(file)
+    try:
+        positions = parse_carry_forward(data, file.filename)
+    except Exception as exc:
+        raise HTTPException(status_code=422, detail=f"Konnte Positionen nicht lesen: {exc}")
+    return JSONResponse({
+        "ok": True,
+        "count": len(positions),
+        "positions": [
+            {
+                "isin": p.isin,
+                "name": p.name,
+                "valor": p.valor,
+                "quantity": (str(p.quantity) if p.quantity is not None else ""),
+                "source": p.source,
+            }
+            for p in positions
+        ],
+    })
+
+
 @app.post("/api/generate")
 async def generate(
     file: UploadFile = File(...),
@@ -155,9 +203,11 @@ async def generate(
 
     tax_year = infer_tax_year(parsed.transactions)
     cfg = _config_from_form(config, tax_year)
+    opening = _opening_positions_from_form(config)
     result = classify(parsed.transactions, default_country=cfg.country)
     summary = build_summary(result, cfg, cash_balances=parsed.cash_balances)
-    statement, report = build_statement(result, cfg, cash_balances=parsed.cash_balances)
+    statement, report = build_statement(result, cfg, cash_balances=parsed.cash_balances,
+                                        opening_positions=opening)
 
     xml_bytes = statement.to_xml_bytes()
     validation = validate_ech0196(xml_bytes)
@@ -197,6 +247,7 @@ async def generate(
                 "bank_interest_chf": float(report.total_bank_interest_chf),
                 "cash_tax_value_chf": float(report.total_cash_tax_value_chf),
             },
+            "carried_count": report.carried_count,
         },
         "summary": summary,
     })
@@ -216,8 +267,10 @@ async def pdf(
 
     tax_year = infer_tax_year(parsed.transactions)
     cfg = _config_from_form(config, tax_year)
+    opening = _opening_positions_from_form(config)
     result = classify(parsed.transactions, default_country=cfg.country)
-    statement, _ = build_statement(result, cfg, cash_balances=parsed.cash_balances)
+    statement, _ = build_statement(result, cfg, cash_balances=parsed.cash_balances,
+                                   opening_positions=opening)
 
     try:
         pdf_bytes = render_pdf(statement, language="de")

@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Swissquote → eCH-0196 (Browser-only)</title>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧾</text></svg>">
+</head>
+<body>
+  <div class="wrap">
+    <header class="app">
+      <div class="logo">
+        <div class="mark">SQ</div>
+        <div>
+          <h1>Swissquote → E‑Steuerauszug</h1>
+          <div class="sub">Läuft komplett im Browser · eCH‑0196 XML · kein Server</div>
+        </div>
+      </div>
+      <button class="theme-toggle" id="themeToggle" type="button">◐ Theme</button>
+    </header>
+
+    <div class="banner info" style="margin:16px 0">
+      <span class="ico">🔒</span>
+      <div><strong>Ihre Daten verlassen dieses Gerät nicht.</strong> CSV/PDF werden lokal im Browser verarbeitet – nichts wird hochgeladen. Der eCH‑0196‑XML wird hier erzeugt und heruntergeladen.</div>
+    </div>
+
+    <div class="card">
+      <h2>1. Datei wählen</h2>
+      <p class="hint"><strong>Kontoauszug‑PDF</strong> (empfohlen – inkl. Kontostände &amp; Personalien) oder Transaktions‑<strong>CSV</strong>.</p>
+      <div class="dropzone" id="dropzone">
+        <div class="big">Datei hierher ziehen oder klicken</div>
+        <div class="small">Kontoauszug‑<code>PDF</code> oder Transaktions‑<code>CSV</code></div>
+        <div class="file" id="fileName" hidden></div>
+      </div>
+      <input type="file" id="fileInput" accept=".csv,.pdf,text/csv,application/pdf">
+      <div id="parseStatus" class="muted-note" style="margin-top:8px"></div>
+      <div class="error" id="err" hidden></div>
+    </div>
+
+    <div class="card" id="formCard" hidden>
+      <h2>2. Angaben</h2>
+      <div class="grid3">
+        <div class="field"><label>Steuerjahr</label><select id="f_year"></select></div>
+        <div class="field"><label>Kanton</label><select id="f_canton"></select></div>
+        <div class="field"><label>Kunden‑/Kontonummer</label><input id="f_client" placeholder="z.B. 123456"></div>
+      </div>
+      <div class="grid3" style="margin-top:12px">
+        <div class="field"><label>Vorname</label><input id="f_first"></div>
+        <div class="field"><label>Nachname</label><input id="f_last"></div>
+        <div class="field"><label>Steuerwerte</label>
+          <select id="f_taxmode">
+            <option value="minimal" selected>Minimal (Kursliste – empfohlen)</option>
+            <option value="estimate">Schätzwerte einsetzen</option>
+          </select>
+        </div>
+      </div>
+      <div class="subhead">Umrechnungskurse in CHF</div>
+      <div class="grid3" id="fxGrid"></div>
+      <div class="actions">
+        <button class="btn primary" id="genBtn" type="button">eCH‑0196 XML &amp; Dashboard erzeugen</button>
+      </div>
+    </div>
+
+    <div class="card" id="resultCard" hidden>
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap">
+        <div><h2 style="margin-bottom:6px">3. Ergebnis</h2><div id="badge"></div></div>
+        <button class="btn primary" id="dlBtn" type="button">⬇ XML herunterladen</button>
+      </div>
+      <div class="banner info" style="margin-top:12px"><span class="ico">ℹ️</span><div>Importieren Sie die XML in Ihre Steuersoftware. Selbst erzeugt, <strong>nicht bank‑signiert</strong>; die Software ergänzt die offiziellen Steuerwerte. <em>Barcode‑PDF:</em> siehe Server‑Version (der eCH‑Macro‑Barcode wird noch nicht im Browser erzeugt).</div></div>
+    </div>
+
+    <div id="dashboardHost"></div>
+
+    <footer class="app">
+      100 % Browser · eCH‑0196 v2.2 · pdf.js · Kein Ersatz für Steuerberatung.
+    </footer>
+  </div>
+
+  <script src="vendor/pdf.min.js"></script>
+  <script src="pdfparse.js"></script>
+  <script src="core.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

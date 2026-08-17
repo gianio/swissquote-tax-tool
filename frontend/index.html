@@ -81,6 +81,15 @@
           <label class="toggle"><input type="checkbox" id="t_metals" checked> Edelmetalle (Gold/XAU)</label>
         </div>
 
+        <div class="subhead">Vorjahres‑Positionen / Bindung an softax <span class="desc" style="text-transform:none;font-weight:400">(optional)</span></div>
+        <p class="hint">Damit Titel, die in softax schon aus dem Vorjahr erfasst sind, <strong>weitergeführt statt doppelt</strong> angelegt werden. Laden Sie den <strong>Vorjahres‑Steuerauszug (eCH‑0196 XML)</strong> oder den <strong>softax‑Wertschriftenexport (PDF)</strong>. Der Anfangsbestand (01.01.) wird daraus übernommen; Valorennummern binden die Titel.</p>
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+          <input type="file" id="cfInput" accept=".xml,.pdf" style="display:none">
+          <button class="btn ghost" id="cfBtn" type="button">Vorjahres‑Datei wählen …</button>
+          <span id="cfStatus" class="muted-note"></span>
+        </div>
+        <div id="cfTableHost" style="margin-top:12px"></div>
+
         <div class="subhead">Steuerwerte per 31.12.</div>
         <div class="field" style="max-width:520px">
           <select id="f_taxmode">
