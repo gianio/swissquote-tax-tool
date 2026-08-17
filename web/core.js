@@ -342,5 +342,68 @@
     };
   }
 
-  return { parseCsv, classify, buildXml, valorFromIsin, _fmt: fmt };
+  // ---- dashboard summary (client-side) -----------------------------------
+  function summarize(result, cfg, cashBalances) {
+    const rate = (c) => (cfg.fxRates && cfg.fxRates[c] != null ? Number(cfg.fxRates[c]) : (c === "CHF" ? 1 : 1));
+    let buyN = 0, sellN = 0, buyChf = 0, sellChf = 0;
+    let divN = 0, divGrossChf = 0, divNetChf = 0, swissWht = 0, foreignWht = 0;
+    const divItems = [];
+    const catValue = {};
+    const positions = [];
+
+    for (const inst of result.instruments) {
+      for (const m of inst.movements) {
+        const chf = (m.gross || 0) * rate(m.currency);
+        if (m.is_addition === undefined ? m.qty > 0 : m.is_addition) { buyN++; buyChf += chf; }
+        else { sellN++; sellChf += chf; }
+      }
+      const isSwiss = inst.country === "CH";
+      let incChf = 0;
+      for (const inc of inst.income) {
+        divN++;
+        const r = rate(inc.currency);
+        const g = inc.gross * r;
+        divGrossChf += g; divNetChf += inc.net * r; incChf += g;
+        if (isSwiss) swissWht += inc.tax * r; else foreignWht += inc.tax * r;
+        divItems.push({ date: inc.date, name: inst.name, isin: inst.isin, type: inc.type,
+          currency: inc.currency, gross: inc.gross, tax: inc.tax, net: inc.net, grossChf: g, swiss: isSwiss });
+      }
+      let last = null;
+      for (const m of chronological(inst.movements).reverse()) { if (m.unitPrice > 0) { last = m.unitPrice; break; } }
+      const est = (inst.closingQty !== 0 && last != null) ? inst.closingQty * last * rate(inst.currency) : 0;
+      catValue[inst.category] = (catValue[inst.category] || 0) + est;
+      positions.push({ name: inst.name, isin: inst.isin, category: inst.category, currency: inst.currency,
+        closingQty: inst.closingQty, openingInferred: inst.openingInferred, carried: !!inst.carried,
+        taxValueChf: est, incomeChf: incChf, trades: inst.movements.length });
+    }
+    divItems.sort((a, b) => b.grossChf - a.grossChf);
+    positions.sort((a, b) => b.taxValueChf - a.taxValueChf);
+
+    let interestChf = 0;
+    for (const inc of result.cashInterest) interestChf += inc.gross * rate(inc.currency);
+
+    const cash = [];
+    let cashTotal = 0;
+    for (const b of (cashBalances || [])) {
+      if (b.currency === "XAU") continue;
+      const chf = b.amount * rate(b.currency);
+      cashTotal += chf;
+      cash.push({ currency: b.currency, amount: b.amount, amountChf: chf });
+    }
+
+    return {
+      taxYear: cfg.taxYear,
+      zugaenge: { count: buyN, totalChf: buyChf },
+      abgaenge: { count: sellN, totalChf: sellChf },
+      dividenden: { count: divN, grossChf: divGrossChf, netChf: divNetChf,
+        swissWhtChf: swissWht, foreignWhtChf: foreignWht, top: divItems.slice(0, 15) },
+      bankInterestChf: interestChf,
+      positions,
+      categoryValue: Object.entries(catValue).map(([c, v]) => ({ category: c, valueChf: v })).sort((a, b) => b.valueChf - a.valueChf),
+      cash, cashTotalChf: cashTotal,
+      portfolioChf: Object.values(catValue).reduce((a, b) => a + b, 0),
+    };
+  }
+
+  return { parseCsv, classify, buildXml, summarize, valorFromIsin, _fmt: fmt };
 });
