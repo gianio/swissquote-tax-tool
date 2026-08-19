@@ -55,6 +55,15 @@
           </select>
         </div>
       </div>
+      <div class="subhead">Vorjahres‑Positionen / Bindung an softax <span class="desc" style="text-transform:none;font-weight:400">(optional)</span></div>
+      <p class="hint">Damit Titel, die in softax schon erfasst sind, weitergeführt statt doppelt angelegt werden. Vorjahres‑<strong>eCH‑0196‑XML</strong> oder softax‑<strong>Wertschriftenexport (PDF)</strong> wählen.</p>
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+        <input type="file" id="cfInput" accept=".xml,.pdf" style="display:none">
+        <button class="btn ghost" id="cfBtn" type="button">Vorjahres‑Datei wählen …</button>
+        <span id="cfStatus" class="muted-note"></span>
+      </div>
+      <div id="cfTableHost" style="margin-top:12px"></div>
+
       <div class="subhead">Umrechnungskurse in CHF</div>
       <div class="grid3" id="fxGrid"></div>
       <div class="actions">
@@ -65,9 +74,13 @@
     <div class="card" id="resultCard" hidden>
       <div style="display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap">
         <div><h2 style="margin-bottom:6px">3. Ergebnis</h2><div id="badge"></div></div>
-        <button class="btn primary" id="dlBtn" type="button">⬇ XML herunterladen</button>
+        <div class="actions" style="margin-top:0">
+          <button class="btn ghost" id="dlBtn" type="button">⬇ XML</button>
+          <button class="btn primary" id="dlPdfBtn" type="button">⬇ PDF mit Barcode</button>
+        </div>
       </div>
-      <div class="banner info" style="margin-top:12px"><span class="ico">ℹ️</span><div>Importieren Sie die XML in Ihre Steuersoftware. Selbst erzeugt, <strong>nicht bank‑signiert</strong>; die Software ergänzt die offiziellen Steuerwerte. <em>Barcode‑PDF:</em> siehe Server‑Version (der eCH‑Macro‑Barcode wird noch nicht im Browser erzeugt).</div></div>
+      <div id="pdfStatus" class="muted-note" style="margin-top:8px"></div>
+      <div class="banner info" style="margin-top:12px"><span class="ico">ℹ️</span><div>Importieren Sie die <strong>PDF mit Barcode</strong> in Ihre Steuersoftware (softax scannt den Barcode) – oder die XML direkt. Selbst erzeugt, <strong>nicht bank‑signiert</strong>; die Software ergänzt die offiziellen Steuerwerte. Der Barcode wird beim ersten Mal etwas dauern (Python‑Laufzeit lädt einmalig lokal).</div></div>
     </div>
 
     <div id="dashboardHost"></div>
@@ -78,7 +91,10 @@
   </div>
 
   <script src="vendor/pdf.min.js"></script>
+  <script src="vendor/pdf-lib.min.js"></script>
   <script src="pdfparse.js"></script>
+  <script src="carryforward.js"></script>
+  <script src="barcode.js"></script>
   <script src="core.js"></script>
   <script src="app.js"></script>
 </body>

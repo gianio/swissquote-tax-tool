@@ -209,8 +209,35 @@
   }
 
   // ---- eCH-0196 XML builder ----------------------------------------------
+  // Override inferred opening balances with carried-forward positions so the
+  // statement binds onto items already in the tax software. Matches by ISIN.
+  function applyCarryForward(result, openingPositions) {
+    let carried = 0;
+    if (!openingPositions || !openingPositions.length) return 0;
+    const cf = {};
+    for (const p of openingPositions) if (p.isin) cf[p.isin] = p;
+    for (const inst of result.instruments) {
+      const p = cf[inst.isin];
+      if (!p) continue;
+      if (p.quantity != null && p.quantity !== "") {
+        const q = Number(p.quantity);
+        if (!Number.isNaN(q)) {
+          const running = inst.closingQty - inst.openingQty;
+          inst.openingQty = q;
+          inst.closingQty = q + running;
+          inst.openingInferred = false;
+          inst.carried = true;
+          carried++;
+        }
+      }
+      if (p.valor) { const v = parseInt(p.valor, 10); if (!Number.isNaN(v)) inst.valorOverride = v; }
+    }
+    return carried;
+  }
+
   function buildXml(result, cfg) {
     const rate = (c) => (cfg.fxRates && cfg.fxRates[c] != null ? Number(cfg.fxRates[c]) : (c === "CHF" ? 1 : 1));
+    const carriedCount = applyCarryForward(result, cfg.openingPositions);
     const periodFrom = `${cfg.taxYear}-01-01`;
     const periodTo = `${cfg.taxYear}-12-31`;
     const minimal = cfg.taxValueMode !== "estimate";
@@ -232,8 +259,8 @@
         `securityName="${xmlEsc((inst.name || "Unknown").slice(0, 60))}"`,
       ];
       if (inst.isin) attrs.push(`isin="${inst.isin}"`);
-      const valor = valorFromIsin(inst.isin);
-      if (valor != null) attrs.push(`valorNumber="${valor}"`);
+      const valor = (inst.valorOverride != null ? inst.valorOverride : valorFromIsin(inst.isin));
+      if (valor != null && valor >= 100 && valor <= 999999999999) attrs.push(`valorNumber="${valor}"`);
 
       const children = [];
 
@@ -262,7 +289,8 @@
       }
 
       // stock: opening balance, movements, closing balance
-      children.push(`      <stock referenceDate="${periodFrom}" mutation="0" quotationType="PIECE" quantity="${fmt(inst.openingQty)}" balanceCurrency="${inst.currency}" name="Bestand 01.01.${inst.openingInferred ? " (rekonstruiert)" : ""}"/>`);
+      const openName = inst.carried ? "Bestand 01.01. (Vorjahr)" : (inst.openingInferred ? "Bestand 01.01. (rekonstruiert)" : "Bestand 01.01.");
+      children.push(`      <stock referenceDate="${periodFrom}" mutation="0" quotationType="PIECE" quantity="${fmt(inst.openingQty)}" balanceCurrency="${inst.currency}" name="${openName}"/>`);
       for (const m of chronological(inst.movements.concat(inst.corp))) {
         const up = m.unitPrice && m.unitPrice > 0 ? ` unitPrice="${fmt(m.unitPrice)}"` : "";
         const bal = m.gross != null ? ` balance="${fmt(money(m.gross))}"` : "";
@@ -339,6 +367,7 @@
       xml,
       totals: { taxValue: totTax, grossA: totA, grossB: totB, wht: totWht, cashTax, bankInterest },
       securitiesCount: posId - 1,
+      carriedCount,
     };
   }
 
