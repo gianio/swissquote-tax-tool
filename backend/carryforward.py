@@ -123,13 +123,9 @@ def _parse_ech_xml(data: bytes) -> List[OpeningPosition]:
 
 # --- softax Wertschriftenverzeichnis PDF ---------------------------------
 def _concat(words) -> str:
-    s, lastx = "", None
-    for w in sorted(words, key=lambda w: w[0]):
-        if lastx is not None and w[0] - lastx > 3:
-            s += " "
-        s += w[4]
-        lastx = w[2]
-    return s
+    # fitz's get_text("words") already segments text into whole words, so a
+    # plain space join is correct (no x-gap heuristic needed / safe).
+    return " ".join(w[4] for w in sorted(words, key=lambda w: w[0]))
 
 
 def _parse_softax_pdf(data: bytes) -> List[OpeningPosition]:
@@ -148,7 +144,9 @@ def _parse_softax_pdf(data: bytes) -> List[OpeningPosition]:
         blocks, cur = [], None
         for y in ys:
             toks = sorted(lines[y], key=lambda w: w[0])
-            is_marker = toks and toks[0][0] < 40 and re.match(r"^[°~]", toks[0][4])
+            # Row markers: "°" (no ISIN entered, e.g. accounts) or "**" (ISIN
+            # present). Some softax versions may also use "~".
+            is_marker = toks and toks[0][0] < 40 and re.match(r"^[°~*]", toks[0][4])
             if is_marker:
                 if cur:
                     blocks.append(cur)

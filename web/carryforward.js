@@ -67,12 +67,9 @@
 
   // --- softax Wertschriftenverzeichnis PDF --------------------------------
   function concatLine(toks) {
-    let s = "", lastx = null;
-    for (const t of toks.sort((a, b) => a.x - b.x)) {
-      if (lastx != null && t.x - lastx > 3) s += " ";
-      s += t.s; lastx = t.x2;
-    }
-    return s;
+    // pdf.js text items on one line are already separate tokens, so a plain
+    // space join is correct (no x-gap heuristic needed).
+    return toks.sort((a, b) => a.x - b.x).map((t) => t.s).join(" ");
   }
 
   async function parseSoftaxPdf(arrayBuffer, pdfjsLib) {
@@ -98,7 +95,9 @@
       for (const [, toks] of lines) {
         const sorted = toks.sort((a, b) => a.x - b.x);
         const first = sorted[0];
-        const isMarker = first && first.x < 40 && /^[°~]/.test(first.s);
+        // Row markers: "°" (no ISIN entered, e.g. accounts) or "**" (ISIN
+        // present). Some softax versions may also use "~".
+        const isMarker = first && first.x < 40 && /^[°~*]/.test(first.s);
         // pdf.js y grows upward; only consider data area (skip header legend)
         if (isMarker) { if (cur) blocks.push(cur); cur = [sorted]; }
         else if (cur) cur.push(sorted);
