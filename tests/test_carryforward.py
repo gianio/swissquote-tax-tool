@@ -66,3 +66,87 @@ def test_opening_positions_accepts_dicts():
         opening_positions=[{"isin": "CH0038863350", "quantity": "50"}],
     )
     assert report.carried_count == 1
+
+
+# --- synthetic softax "Kontrollausdruck Wertschriftenverzeichnis" --------
+#
+# Built in-memory (no real financial document committed to the repo) to
+# reproduce the exact column layout of a real softax export: a row marker
+# ("°" for no-ISIN rows like accounts, "**" for ISIN-bearing securities) at
+# x<40, the Stückzahl in x 74-95, then the ISIN/name, then a Steuerwert (CHF)
+# figure much further right. The parser used to only recognise "°"/"~" as a
+# block-starting marker, so every "**" row silently merged into the last "°"
+# block and only one (wrong) position ever came out of a real file. ISINs
+# below are public security identifiers (ABB, Apple, an iShares ETF) — not
+# personal data.
+def _softax_pdf_bytes() -> bytes:
+    import fitz
+
+    doc = fitz.open()
+    page = doc.new_page()
+    y = 260  # parser skips y<=250 to drop the repeated header legend
+
+    def row(marker, qty, isin, name, kind, steuerwert):
+        nonlocal y
+        page.insert_text((21, y), marker, fontsize=8)
+        page.insert_text((32, y), "-", fontsize=8)
+        if qty is not None:
+            page.insert_text((78, y), qty, fontsize=8)
+        x = 93
+        if isin:
+            page.insert_text((x, y), isin + ",", fontsize=8)
+            x += 8 * len(isin + ", ")
+        words = name.split(" ")
+        for i, word in enumerate(words):
+            suffix = "," if i == len(words) - 1 else ""
+            page.insert_text((x, y), word + suffix, fontsize=8)
+            x += 8 * (len(word) + 2)
+        page.insert_text((x, y), kind, fontsize=8)
+        if steuerwert is not None:
+            page.insert_text((428, y), steuerwert, fontsize=8)
+        y += 13
+
+    # No-ISIN rows (accounts / unlisted funds) use "°" — these must NOT
+    # swallow the "**" rows that follow.
+    row("°", None, "", "CH00 0000 0000 0000 0000 0 Fake Bank AG", "PK", "5000")
+    row("°", "12", "", "Fake Fund Units", "AF", "2400")
+    # ISIN-bearing rows use "**". Steuerwert (decoy CHF figure) is
+    # deliberately far from the Stückzahl so a column mix-up is obvious.
+    row("**", "10", "CH0012221716", "ABB AG", "Akt", "99999")
+    row("**", "65", "IE00B4L5Y983", "iShares Core MSCI World", "AF", "88888")
+    row("**", "3", "US0378331005", "Apple Inc", "Akt", "12345")
+
+    pdf_bytes = doc.tobytes()
+    doc.close()
+    return pdf_bytes
+
+
+_EXPECTED_SOFTAX_POSITIONS = {
+    "CH0012221716": Decimal("10"),   # decoy Steuerwert 99999
+    "IE00B4L5Y983": Decimal("65"),   # decoy Steuerwert 88888
+    "US0378331005": Decimal("3"),    # decoy Steuerwert 12345
+}
+
+
+def test_parse_softax_pdf_recovers_all_isin_positions():
+    positions = parse_carry_forward(_softax_pdf_bytes(), "test.pdf")
+    by_isin = {p.isin: p for p in positions}
+    assert set(by_isin) == set(_EXPECTED_SOFTAX_POSITIONS)
+
+
+def test_parse_softax_pdf_quantity_is_stueckzahl_not_steuerwert():
+    # Regression guard for the "**"-marker bug: quantities must match the
+    # Stückzahl column, never fall back to reading the Steuerwert (CHF) column,
+    # and every "**" row must survive as its own position (not get merged
+    # into the preceding "°" block).
+    positions = parse_carry_forward(_softax_pdf_bytes(), "test.pdf")
+    by_isin = {p.isin: p for p in positions}
+    for isin, expected_qty in _EXPECTED_SOFTAX_POSITIONS.items():
+        assert by_isin[isin].quantity == expected_qty, isin
+
+
+def test_parse_softax_pdf_names_have_spaces():
+    positions = parse_carry_forward(_softax_pdf_bytes(), "test.pdf")
+    by_isin = {p.isin: p for p in positions}
+    assert by_isin["CH0012221716"].name == "ABB AG"
+    assert by_isin["US0378331005"].name == "Apple Inc"
