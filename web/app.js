@@ -71,7 +71,42 @@ function collectCfg(){
   return { taxYear:Number($("f_year").value), canton:$("f_canton").value,
     firstName:$("f_first").value.trim(), lastName:$("f_last").value.trim(),
     clientNumber:$("f_client").value.trim(), taxValueMode:$("f_taxmode").value,
-    fxRates:fx, cashBalances };
+    fxRates:fx, cashBalances, openingPositions:collectCarry() };
+}
+
+// ---- carry-forward -------------------------------------------------------
+$("cfBtn").addEventListener("click",()=>$("cfInput").click());
+$("cfInput").addEventListener("change", async ()=>{
+  const file=$("cfInput").files[0]; if(!file)return;
+  $("cfStatus").textContent="Lese Positionen …";
+  try{
+    const buf=await file.arrayBuffer();
+    const positions=await SQCarry.parse(buf, file.name, pdfjsLib);
+    renderCarryTable(positions);
+    const withQ=positions.filter((p)=>p.quantity!=="").length;
+    $("cfStatus").textContent=`✓ ${positions.length} Positionen (${withQ} mit Bestand) – bitte prüfen.`;
+  }catch(e){ $("cfStatus").textContent="⚠ "+e.message; }
+});
+function renderCarryTable(positions){
+  if(!positions.length){$("cfTableHost").innerHTML="";return;}
+  const rows=positions.map((p)=>`<tr>
+    <td><input class="cf-isin" value="${esc(p.isin)}" style="width:118px"></td>
+    <td title="${esc(p.name)}">${esc(p.name.length>24?p.name.slice(0,23)+"…":p.name)}</td>
+    <td><input class="cf-valor" value="${esc(p.valor??"")}" style="width:92px" placeholder="—"></td>
+    <td><input class="cf-qty" value="${esc(p.quantity)}" style="width:78px" placeholder="Bestand"></td></tr>`).join("");
+  $("cfTableHost").innerHTML='<div class="banner info" style="margin-bottom:8px"><span class="ico">↪</span><div>Anfangsbestand (01.01.) je Titel – aus der Datei vorausgefüllt. Menge/Valor prüfen; leere Bestände werden ignoriert.</div></div>'+
+    '<div class="table-wrap"><table><thead><tr><th>ISIN</th><th>Titel</th><th>Valor</th><th>Bestand 01.01.</th></tr></thead><tbody>'+rows+'</tbody></table></div>';
+}
+function collectCarry(){
+  const host=$("cfTableHost"); if(!host||!host.querySelector("table"))return [];
+  const out=[];
+  host.querySelectorAll("tbody tr").forEach((tr)=>{
+    const isin=tr.querySelector(".cf-isin").value.trim();
+    const valor=tr.querySelector(".cf-valor").value.trim();
+    const qty=tr.querySelector(".cf-qty").value.trim();
+    if(isin)out.push({isin,valor:valor||null,quantity:qty||""});
+  });
+  return out;
 }
 
 $("genBtn").addEventListener("click",()=>{
@@ -82,9 +117,10 @@ $("genBtn").addEventListener("click",()=>{
     const sum=SQCore.summarize(res,cfg,cashBalances);
     lastXml=out.xml;
     const wf=!new DOMParser().parseFromString(out.xml,"application/xml").querySelector("parsererror");
-    $("badge").innerHTML= wf
+    $("badge").innerHTML= (wf
       ? '<span class="badge ok">✓ eCH‑0196 v2.2 erzeugt (im Browser)</span>'
-      : '<span class="badge bad">✗ XML‑Fehler</span>';
+      : '<span class="badge bad">✗ XML‑Fehler</span>')
+      + (out.carriedCount ? ` <span class="badge ok" style="background:color-mix(in srgb,var(--good) 12%,transparent)">↪ ${out.carriedCount} aus Vorjahr weitergeführt</span>` : "");
     $("resultCard").hidden=false;
     $("dashboardHost").innerHTML=dashboardHtml(sum);
     $("resultCard").scrollIntoView({behavior:"smooth"});
@@ -93,10 +129,29 @@ $("genBtn").addEventListener("click",()=>{
 
 $("dlBtn").addEventListener("click",()=>{
   if(!lastXml)return;
-  const blob=new Blob([lastXml],{type:"application/xml"});
-  const a=document.createElement("a"); a.href=URL.createObjectURL(blob);
-  a.download=`eCH-0196_Swissquote_${$("f_year").value}.xml`; a.click(); URL.revokeObjectURL(a.href);
+  download(new Blob([lastXml],{type:"application/xml"}), `eCH-0196_Swissquote_${$("f_year").value}.xml`);
 });
+
+$("dlPdfBtn").addEventListener("click", async ()=>{
+  if(!lastXml)return;
+  const btn=$("dlPdfBtn"), orig=btn.textContent; btn.disabled=true;
+  const setP=(m)=>{$("pdfStatus").textContent=m;};
+  btn.innerHTML='<span class="spinner"></span> Erzeuge …';
+  try{
+    const idM=lastXml.match(/\bid="([^"]+)"/);
+    const y=Number($("f_year").value);
+    const creationTs=Date.UTC(y,11,31,12,0,0)/1000;
+    const pdfBytes=await SQBarcode.generate(lastXml,{statementId:idM?idM[1]:"STATEMENT",creationTs,taxYear:y},setP);
+    download(new Blob([pdfBytes],{type:"application/pdf"}), `eCH-0196_Swissquote_${y}.pdf`);
+    setP("✓ Barcode‑PDF erzeugt.");
+  }catch(e){ setP("⚠ "+e.message); }
+  finally{ btn.disabled=false; btn.textContent=orig; }
+});
+
+function download(blob, name){
+  const a=document.createElement("a"); a.href=URL.createObjectURL(blob);
+  a.download=name; a.click(); URL.revokeObjectURL(a.href);
+}
 
 // ---- dashboard -----------------------------------------------------------
 function kpi(cls,label,value,foot){
