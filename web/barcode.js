@@ -100,6 +100,22 @@ def make_barcodes(xml, file_name, creation_ts):
     return out;
   }
 
+  // Layout per "Beilage zu eCH-0196 V2.2.0 – Barcode Generierung – Technische
+  // Wegleitung" (matched to the server's opensteuerauszug/reportlab renderer,
+  // which is known-good against real tax software): landscape A4, barcodes
+  // rotated 90° and laid out 6-per-page in a single row, module size
+  // 0.42mm (per original column) x 0.4mm-per-pixel-row (x2 ratio = 0.8mm per
+  // PDF417 row). A generic barcode reader (zxing) decodes our un-rotated
+  // barcode fine, but softax's own importer apparently expects this exact
+  // physical layout to even recognise the file — hence matching it exactly.
+  const MM = 2.834645669291339; // pt per mm
+  const PAGE_W_MM = 297, PAGE_H_MM = 210; // landscape A4
+  const MARGIN_LEFT_MM = 24, MARGIN_RIGHT_MM = 13, MARGIN_TOP_MM = 40, MARGIN_BOTTOM_MM = 18;
+  const MODULE_COL_MM = 0.42;      // per original column -> final rotated height
+  const MODULE_ROW_PIXEL_MM = 0.4; // per pixel-row; x RATIO -> final rotated width
+  const RATIO = 2;
+  const BARCODES_PER_ROW = 6;
+
   async function generate(xml, opts, onProgress) {
     opts = opts || {};
     const py = await getPyodide(onProgress);
@@ -115,34 +131,51 @@ def make_barcodes(xml, file_name, creation_ts):
     const font = await pdf.embedFont(StandardFonts.Helvetica);
     const fontB = await pdf.embedFont(StandardFonts.HelveticaBold);
 
-    const PAGE_W = 595.28, PAGE_H = 841.89, MARGIN = 40;
-    const MW = 1.6, RATIO = 2, MH = MW * RATIO;       // module width / height (pt)
-    const GAP = 26;                                    // vertical gap between barcodes
+    const PAGE_W = PAGE_W_MM * MM, PAGE_H = PAGE_H_MM * MM;
+    const ML = MARGIN_LEFT_MM * MM, MR = MARGIN_RIGHT_MM * MM;
+    const MT = MARGIN_TOP_MM * MM, MB = MARGIN_BOTTOM_MM * MM;
+    const usableWidth = PAGE_W - ML - MR;
+    const colWidth = usableWidth / BARCODES_PER_ROW;
+    const rowWidthPt = RATIO * MODULE_ROW_PIXEL_MM * MM;  // per PDF417 row, after rotation
+    const colHeightPt = MODULE_COL_MM * MM;                // per original column, after rotation
     const black = rgb(0, 0, 0);
 
-    let page = null, y = 0;
-    const newPage = () => {
+    const pageCount = Math.max(1, Math.ceil(barcodes.length / BARCODES_PER_ROW));
+    let page = null;
+    const newPage = (pageNum) => {
       page = pdf.addPage([PAGE_W, PAGE_H]);
-      page.drawText("Swissquote - eCH-0196 E-Steuerauszug", { x: MARGIN, y: PAGE_H - MARGIN, size: 12, font: fontB });
-      page.drawText("Steuerjahr " + (opts.taxYear || "") + " - Barcode (macro PDF417) - nicht bank-signiert",
-        { x: MARGIN, y: PAGE_H - MARGIN - 14, size: 8, font, color: rgb(0.3, 0.3, 0.3) });
-      y = PAGE_H - MARGIN - 40;
+      page.drawText("Swissquote - eCH-0196 E-Steuerauszug", { x: ML, y: PAGE_H - MT + 20, size: 12, font: fontB });
+      page.drawText(
+        `Steuerjahr ${opts.taxYear || ""} - Barcode (macro PDF417) - nicht bank-signiert - Seite ${pageNum + 1} / ${pageCount}`,
+        { x: ML, y: PAGE_H - MT + 6, size: 8, font, color: rgb(0.3, 0.3, 0.3) }
+      );
     };
-    newPage();
 
     for (let bi = 0; bi < barcodes.length; bi++) {
+      const pageNum = Math.floor(bi / BARCODES_PER_ROW);
+      const slot = bi % BARCODES_PER_ROW;
+      if (slot === 0) newPage(pageNum);
+
       const bc = barcodes[bi];
-      const bw = bc.w * MW, bh = bc.h * MH;
-      if (y - bh - 16 < MARGIN) newPage();
-      page.drawText(`Barcode ${bi + 1} / ${barcodes.length}`, { x: MARGIN, y: y - 9, size: 8, font, color: rgb(0.4, 0.4, 0.4) });
-      const top = y - 14;
+      const rotatedWidth = bc.h * rowWidthPt;   // rows -> horizontal extent
+      const rotatedHeight = bc.w * colHeightPt; // columns -> vertical extent
+      const originX = ML + slot * colWidth + (colWidth - rotatedWidth) / 2;
+      const originY = MB;
+
+      page.drawText(`${bi + 1}/${barcodes.length}`, {
+        x: originX, y: originY + rotatedHeight + 4, size: 7, font, color: rgb(0.4, 0.4, 0.4),
+      });
+
       for (let r = 0; r < bc.rows.length; r++) {
-        const yy = top - r * MH;
+        const xBand = originX + r * rowWidthPt;
         for (const [start, len] of runs(bc.rows[r])) {
-          page.drawRectangle({ x: MARGIN + start * MW, y: yy - MH, width: len * MW, height: MH, color: black });
+          page.drawRectangle({
+            x: xBand, y: originY + start * colHeightPt,
+            width: rowWidthPt, height: len * colHeightPt,
+            color: black,
+          });
         }
       }
-      y = top - bh - GAP;
     }
     return await pdf.save();
   }
