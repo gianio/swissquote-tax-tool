@@ -20,6 +20,11 @@
       <button class="theme-toggle" id="themeToggle" type="button">◐ Theme</button>
     </header>
 
+    <div class="banner warn" style="margin:16px 0 0">
+      <span class="ico">⚠️</span>
+      <div><strong>Inoffizielles Tool, keine Steuerberatung.</strong> Diese Anwendung ist ein privates Community‑Projekt und steht in <strong>keiner Verbindung zu Swissquote, softax oder einer Steuerbehörde</strong> – sie wird von keiner dieser Stellen erstellt, geprüft, unterstützt oder empfohlen. Alle Angaben ohne Gewähr; prüfen Sie den erzeugten Steuerauszug sorgfältig, bevor Sie ihn einreichen. Bei Unsicherheiten wenden Sie sich an eine Steuerberatung.</div>
+    </div>
+
     <div class="banner info" style="margin:16px 0">
       <span class="ico">🔒</span>
       <div><strong>Ihre Daten verlassen dieses Gerät nicht.</strong> CSV/PDF werden lokal im Browser verarbeitet – nichts wird hochgeladen. Der eCH‑0196‑XML wird hier erzeugt und heruntergeladen.</div>
@@ -55,6 +60,13 @@
           </select>
         </div>
       </div>
+      <div class="grid3" style="margin-top:12px">
+        <div class="field"><label>Bank / Institut <span class="desc" style="text-transform:none;font-weight:400">(auf dem Steuerauszug)</span></label>
+          <input id="f_institution" placeholder="z.B. Ihre Depotbank AG" value="Musterbank AG"></div>
+        <div class="field"><label>BC‑/Clearing‑Nr. <span class="desc" style="text-transform:none;font-weight:400">(optional)</span></label>
+          <input id="f_clearing" placeholder="00000" value="00000" maxlength="5"></div>
+      </div>
+      <p class="hint">Voreingestellt ist eine <strong>fiktive Platzhalter‑Bank</strong>. Tragen Sie hier Ihr echtes Institut ein (z.B. Swissquote), damit der Steuerauszug korrekt beschriftet ist.</p>
       <div class="subhead">Vorjahres‑Positionen / Bindung an softax <span class="desc" style="text-transform:none;font-weight:400">(optional)</span></div>
       <p class="hint">Damit Titel, die in softax schon erfasst sind, weitergeführt statt doppelt angelegt werden. Vorjahres‑<strong>eCH‑0196‑XML</strong> oder softax‑<strong>Wertschriftenexport (PDF)</strong> wählen.</p>
       <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">

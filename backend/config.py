@@ -42,9 +42,9 @@ class StatementConfig:
     last_name: str = ""
     client_number: str = ""              # Swissquote account / client number
     depot_number: str = "1"
-    institution_name: str = "Swissquote Bank AG"
+    institution_name: str = "Musterbank AG"  # fictive placeholder; set to your real bank
     institution_lei: Optional[str] = None
-    institution_clearing: str = "06435"  # Swissquote Bank Ltd BC/clearing number
+    institution_clearing: str = "00000"  # placeholder BC/clearing number; set to your bank's real one
     country: str = "CH"                  # taxpayer country of residence
 
     include_options: bool = True

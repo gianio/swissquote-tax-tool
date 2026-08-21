@@ -196,7 +196,7 @@ def _build_bank_accounts(
 
         accounts.append(
             BankAccount(
-                bankAccountName=BankAccountName(f"Swissquote {currency}"),
+                bankAccountName=BankAccountName(f"{config.institution_name} {currency}"),
                 bankAccountCurrency=currency,
                 bankAccountCountry="CH",
                 taxValue=tax_value,

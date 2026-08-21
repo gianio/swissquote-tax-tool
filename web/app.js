@@ -71,6 +71,8 @@ function collectCfg(){
   return { taxYear:Number($("f_year").value), canton:$("f_canton").value,
     firstName:$("f_first").value.trim(), lastName:$("f_last").value.trim(),
     clientNumber:$("f_client").value.trim(), taxValueMode:$("f_taxmode").value,
+    institution:$("f_institution").value.trim() || "Musterbank AG",
+    clearing:$("f_clearing").value.trim() || "00000",
     fxRates:fx, cashBalances, openingPositions:collectCarry() };
 }
 
@@ -129,7 +131,7 @@ $("genBtn").addEventListener("click",()=>{
 
 $("dlBtn").addEventListener("click",()=>{
   if(!lastXml)return;
-  download(new Blob([lastXml],{type:"application/xml"}), `eCH-0196_Swissquote_${$("f_year").value}.xml`);
+  download(new Blob([lastXml],{type:"application/xml"}), `eCH-0196_${$("f_year").value}.xml`);
 });
 
 $("dlPdfBtn").addEventListener("click", async ()=>{
@@ -141,8 +143,9 @@ $("dlPdfBtn").addEventListener("click", async ()=>{
     const idM=lastXml.match(/\bid="([^"]+)"/);
     const y=Number($("f_year").value);
     const creationTs=Date.UTC(y,11,31,12,0,0)/1000;
-    const pdfBytes=await SQBarcode.generate(lastXml,{statementId:idM?idM[1]:"STATEMENT",creationTs,taxYear:y},setP);
-    download(new Blob([pdfBytes],{type:"application/pdf"}), `eCH-0196_Swissquote_${y}.pdf`);
+    const institution=$("f_institution").value.trim() || "Musterbank AG";
+    const pdfBytes=await SQBarcode.generate(lastXml,{statementId:idM?idM[1]:"STATEMENT",creationTs,taxYear:y,institution},setP);
+    download(new Blob([pdfBytes],{type:"application/pdf"}), `eCH-0196_${y}.pdf`);
     setP("✓ Barcode‑PDF erzeugt.");
   }catch(e){ setP("⚠ "+e.message); }
   finally{ btn.disabled=false; btn.textContent=orig; }

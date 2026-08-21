@@ -328,14 +328,14 @@
           accTax = money(balByCcy[c] * r); cashTax += accTax;
           tv = `      <taxValue referenceDate="${periodTo}" balanceCurrency="${c}" balance="${fmt(money(balByCcy[c]))}" exchangeRate="${fmt(r)}" value="${fmt(accTax)}" name="Saldo ${c} 31.12."/>\n`;
         }
-        accts.push(`    <bankAccount bankAccountName="Swissquote ${c}" bankAccountCurrency="${c}" bankAccountCountry="CH" totalTaxValue="${fmt(accTax)}" totalGrossRevenueA="${fmt(aGross)}" totalGrossRevenueB="0" totalWithHoldingTaxClaim="0">\n${tv}${pays.join("\n")}${pays.length ? "\n" : ""}    </bankAccount>`);
+        accts.push(`    <bankAccount bankAccountName="${xmlEsc(cfg.institution || "Musterbank AG")} ${c}" bankAccountCurrency="${c}" bankAccountCountry="CH" totalTaxValue="${fmt(accTax)}" totalGrossRevenueA="${fmt(aGross)}" totalGrossRevenueB="0" totalWithHoldingTaxClaim="0">\n${tv}${pays.join("\n")}${pays.length ? "\n" : ""}    </bankAccount>`);
       }
       totA += bankInterest; totTax += cashTax;
       bankXml = `  <listOfBankAccounts totalTaxValue="${fmt(cashTax)}" totalGrossRevenueA="${fmt(bankInterest)}" totalGrossRevenueB="0" totalWithHoldingTaxClaim="0">\n${accts.join("\n")}\n  </listOfBankAccounts>\n`;
     }
 
     // Identifiers
-    const clearing = (cfg.clearing || "06435").replace(/\D/g, "").slice(0, 5).padStart(5, "0");
+    const clearing = (cfg.clearing || "00000").replace(/\D/g, "").slice(0, 5).padStart(5, "0");
     const cust = (cfg.clientNumber || "").replace(/[^A-Za-z0-9]/g, "").slice(0, 14).padEnd(14, "X");
     const id = `${(cfg.country || "CH").slice(0, 2)}${clearing}${cust}${cfg.taxYear}1231` + "01";
     const creation = `${cfg.taxYear}-12-31T12:00:00+00:00`;
@@ -360,7 +360,7 @@
       `totalTaxValue="${fmt(totTax)}" totalGrossRevenueA="${fmt(totA)}" totalGrossRevenueB="${fmt(totB)}" totalWithHoldingTaxClaim="${fmt(totWht)}">\n`;
 
     const xml = header +
-      `  <institution name="${xmlEsc(cfg.institution || "Swissquote Bank AG")}"/>\n` +
+      `  <institution name="${xmlEsc(cfg.institution || "Musterbank AG")}"/>\n` +
       client + bankXml + listSec + `</taxStatement>\n`;
 
     return {
