@@ -88,7 +88,7 @@ def _config_from_form(config_json: Optional[str], tax_year: int) -> StatementCon
         last_name=(payload.get("last_name") or "").strip(),
         client_number=(payload.get("client_number") or "").strip(),
         depot_number=(payload.get("depot_number") or "1").strip() or "1",
-        institution_name=(payload.get("institution_name") or "Swissquote Bank AG").strip(),
+        institution_name=(payload.get("institution_name") or "Musterbank AG").strip(),
         country=(payload.get("country") or "CH").upper()[:2],
         include_options=bool(payload.get("include_options", True)),
         include_crypto=bool(payload.get("include_crypto", True)),

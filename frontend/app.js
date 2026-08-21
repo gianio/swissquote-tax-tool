@@ -139,7 +139,7 @@ function collectConfig() {
     last_name: $("f_last").value,
     client_number: $("f_client").value,
     depot_number: $("f_depot").value || "1",
-    institution_name: $("f_institution").value || "Swissquote Bank AG",
+    institution_name: $("f_institution").value || "Musterbank AG",
     country: ($("f_country").value || "CH").toUpperCase().slice(0, 2),
     include_options: $("t_options").checked,
     include_crypto: $("t_crypto").checked,

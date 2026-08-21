@@ -262,7 +262,7 @@ def make_barcodes(xml, file_name, creation_ts):
     let page = null;
     const newPage = (pageNum) => {
       page = pdf.addPage([PAGE_W, PAGE_H]);
-      page.drawText("Swissquote - eCH-0196 E-Steuerauszug", { x: ML, y: PAGE_H - MT + 20, size: 12, font: fontB });
+      page.drawText(`${opts.institution || "Musterbank AG"} - eCH-0196 E-Steuerauszug`, { x: ML, y: PAGE_H - MT + 20, size: 12, font: fontB });
       page.drawText(
         `Steuerjahr ${opts.taxYear || ""} - Barcode (macro PDF417) - nicht bank-signiert - Seite ${pageNum + 1} / ${pageCount}`,
         { x: ML, y: PAGE_H - MT + 6, size: 8, font, color: rgb(0.3, 0.3, 0.3) }

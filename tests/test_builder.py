@@ -66,7 +66,7 @@ def test_statement_id_is_ech_format(built):
     statement, _ = built
     # 31 chars: CH + clearing(5) + customer(14) + date(8) + seq(2)
     assert len(statement.id) == 31
-    assert statement.id.startswith("CH06435")
+    assert statement.id.startswith("CH00000")
     assert statement.id.endswith("2025123101")
 
 
