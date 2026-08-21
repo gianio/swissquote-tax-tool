@@ -101,13 +101,15 @@ def make_barcodes(xml, file_name, creation_ts):
   }
 
   // Layout per "Beilage zu eCH-0196 V2.2.0 – Barcode Generierung – Technische
-  // Wegleitung" (matched to the server's opensteuerauszug/reportlab renderer,
-  // which is known-good against real tax software): landscape A4, barcodes
-  // rotated 90° and laid out 6-per-page in a single row, module size
-  // 0.42mm (per original column) x 0.4mm-per-pixel-row (x2 ratio = 0.8mm per
-  // PDF417 row). A generic barcode reader (zxing) decodes our un-rotated
-  // barcode fine, but softax's own importer apparently expects this exact
-  // physical layout to even recognise the file — hence matching it exactly.
+  // Wegleitung", matched exactly to the server's opensteuerauszug/reportlab
+  // renderer (confirmed against a real generated statement): landscape A4,
+  // barcodes rotated 90° and laid out 6-per-page in a single row, module
+  // size 0.42mm (per original column) x 0.4mm-per-pixel-row (x2 ratio =
+  // 0.8mm per PDF417 row). Each barcode is embedded as a rotated raster PNG
+  // image — not drawn as vector rectangles — because that's what the
+  // reference PDF does (pdf417gen.render_image -> PIL rotate(-90) -> PNG ->
+  // reportlab Image flowable), and softax's importer may specifically look
+  // for embedded barcode images rather than rasterising the whole page.
   const MM = 2.834645669291339; // pt per mm
   const PAGE_W_MM = 297, PAGE_H_MM = 210; // landscape A4
   const MARGIN_LEFT_MM = 24, MARGIN_RIGHT_MM = 13, MARGIN_TOP_MM = 40, MARGIN_BOTTOM_MM = 18;
@@ -115,6 +117,121 @@ def make_barcodes(xml, file_name, creation_ts):
   const MODULE_ROW_PIXEL_MM = 0.4; // per pixel-row; x RATIO -> final rotated width
   const RATIO = 2;
   const BARCODES_PER_ROW = 6;
+
+  // Render one barcode's modules to a rotated (90°) raster PNG, matching
+  // pdf417gen.render_image(scale=1, ratio=2) + PIL rotate(-90, expand=True):
+  // pre-rotation image is (w x h*ratio); rotated image is (h*ratio x w).
+  function moduleCanvasPng(bc) {
+    return new Promise((resolve, reject) => {
+      const preH = bc.h * RATIO;
+      const canvas = document.createElement("canvas");
+      canvas.width = preH;   // post-rotation width
+      canvas.height = bc.w;  // post-rotation height
+      const ctx = canvas.getContext("2d");
+      ctx.fillStyle = "#fff";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = "#000";
+      for (let r = 0; r < bc.rows.length; r++) {
+        for (const [start, len] of runs(bc.rows[r])) {
+          ctx.fillRect(preH - (r + 1) * RATIO, start, RATIO, len);
+        }
+      }
+      canvas.toBlob((blob) => {
+        if (!blob) { reject(new Error("Barcode-Rasterung fehlgeschlagen.")); return; }
+        blob.arrayBuffer().then((buf) => resolve(new Uint8Array(buf))).catch(reject);
+      }, "image/png");
+    });
+  }
+
+  // --- 1D "page identifier" barcode (Code128, subset C) -------------------
+  //
+  // Required by "Beilage zu eCH-0196 V2.2.0 – Barcode Generierung –
+  // Technische Wegleitung" on every barcode page, independent of the 2D
+  // macro-PDF417 payload — softax's importer likely uses this to recognise
+  // a page as an eCH-0196 barcode sheet in the first place. Ported from
+  // opensteuerauszug's OneDeeBarCode (render/onedee.py), which in turn uses
+  // reportlab's Code128 encoder — the pattern table below is copied from
+  // reportlab/graphics/barcode/code128.py so the encoding matches exactly
+  // (standard ISO/IEC 15417 Code128 symbol table; letter-encoded widths,
+  // uppercase = bar, lowercase = space, A=1..D=4 units).
+  const CODE128_PATTERNS = {
+    0: 'BaBbBb', 1: 'BbBaBb', 2: 'BbBbBa', 3: 'AbAbBc', 4: 'AbAcBb', 5: 'AcAbBb',
+    6: 'AbBbAc', 7: 'AbBcAb', 8: 'AcBbAb', 9: 'BbAbAc', 10: 'BbAcAb', 11: 'BcAbAb',
+    12: 'AaBbCb', 13: 'AbBaCb', 14: 'AbBbCa', 15: 'AaCbBb', 16: 'AbCaBb', 17: 'AbCbBa',
+    18: 'BbCbAa', 19: 'BbAaCb', 20: 'BbAbCa', 21: 'BaCbAb', 22: 'BbCaAb', 23: 'CaBaCa',
+    24: 'CaAbBb', 25: 'CbAaBb', 26: 'CbAbBa', 27: 'CaBbAb', 28: 'CbBaAb', 29: 'CbBbAa',
+    30: 'BaBaBc', 31: 'BaBcBa', 32: 'BcBaBa', 33: 'AaAcBc', 34: 'AcAaBc', 35: 'AcAcBa',
+    36: 'AaBcAc', 37: 'AcBaAc', 38: 'AcBcAa', 39: 'BaAcAc', 40: 'BcAaAc', 41: 'BcAcAa',
+    42: 'AaBaCc', 43: 'AaBcCa', 44: 'AcBaCa', 45: 'AaCaBc', 46: 'AaCcBa', 47: 'AcCaBa',
+    48: 'CaCaBa', 49: 'BaAcCa', 50: 'BcAaCa', 51: 'BaCaAc', 52: 'BaCcAa', 53: 'BaCaCa',
+    54: 'CaAaBc', 55: 'CaAcBa', 56: 'CcAaBa', 57: 'CaBaAc', 58: 'CaBcAa', 59: 'CcBaAa',
+    60: 'CaDaAa', 61: 'BbAdAa', 62: 'DcAaAa', 63: 'AaAbBd', 64: 'AaAdBb', 65: 'AbAaBd',
+    66: 'AbAdBa', 67: 'AdAaBb', 68: 'AdAbBa', 69: 'AaBbAd', 70: 'AaBdAb', 71: 'AbBaAd',
+    72: 'AbBdAa', 73: 'AdBaAb', 74: 'AdBbAa', 75: 'BdAbAa', 76: 'BbAaAd', 77: 'DaCaAa',
+    78: 'BdAaAb', 79: 'AcDaAa', 80: 'AaAbDb', 81: 'AbAaDb', 82: 'AbAbDa', 83: 'AaDbAb',
+    84: 'AbDaAb', 85: 'AbDbAa', 86: 'DaAbAb', 87: 'DbAaAb', 88: 'DbAbAa', 89: 'BaBaDa',
+    90: 'BaDaBa', 91: 'DaBaBa', 92: 'AaAaDc', 93: 'AaAcDa', 94: 'AcAaDa', 95: 'AaDaAc',
+    96: 'AaDcAa', 97: 'DaAaAc', 98: 'DaAcAa', 99: 'AaCaDa', 100: 'AaDaCa', 101: 'CaAaDa',
+    102: 'DaAaCa', 103: 'BaAdAb', 104: 'BaAbAd', 105: 'BaAbCb', 106: 'BcCaAaB',
+  };
+  const CODE128_START_C = 105, CODE128_STOP = 106;
+
+  // [[isBar, widthUnits], ...] for an even-length numeric string (subset C:
+  // one symbol per digit pair).
+  function code128CElements(digits) {
+    if (digits.length % 2 !== 0 || !/^\d+$/.test(digits)) {
+      throw new Error("Code128-C benötigt eine gerade Anzahl Ziffern.");
+    }
+    const values = [CODE128_START_C];
+    for (let i = 0; i < digits.length; i += 2) values.push(parseInt(digits.slice(i, i + 2), 10));
+    let checksum = values[0];
+    for (let i = 1; i < values.length; i++) checksum += values[i] * i;
+    values.push(checksum % 103, CODE128_STOP);
+    const decomposed = values.map((v) => CODE128_PATTERNS[v]).join("");
+    return [...decomposed].map((ch) => [ch === ch.toUpperCase(), ch.toUpperCase().charCodeAt(0) - 64]);
+  }
+
+  // Draws the page-identifier barcode, rotated 90°, per onedee.py's
+  // draw_barcode_on_canvas: 0.3mm module width, >=7mm bar height, both x a
+  // 1/0.97 print-scale correction; positioned so the top of the (rotated)
+  // barcode sits 10mm from the page top and the human-readable text
+  // baseline sits 5mm from the left edge.
+  function drawPageIdentifierBarcode(page, font, opts) {
+    const { orgNr, pageNumber, isBarcodePage, pageHeightPt } = opts;
+    const PRINT_SCALE = 1 / 0.97;
+    const barWidthPt = 0.3 * MM * PRINT_SCALE;
+    const barHeightPt = 7 * MM * PRINT_SCALE;
+    const marginTopPt = 10 * MM;
+    const marginLeftPt = 5 * MM * PRINT_SCALE;
+    const textGapPt = 5 * MM * PRINT_SCALE;
+
+    const data = "196" + "22" + orgNr + String(pageNumber).padStart(3, "0") + (isBarcodePage ? "1" : "0") + "02";
+    const elements = code128CElements(data);
+
+    const finalBlX = marginLeftPt + textGapPt;
+    const finalBlY = pageHeightPt - marginTopPt;
+    const black = PDFLib.rgb(0, 0, 0);
+
+    let left = 0;
+    for (const [isBar, units] of elements) {
+      const w = units * barWidthPt;
+      if (isBar) {
+        page.drawRectangle({
+          x: finalBlX, width: barHeightPt,
+          y: finalBlY - (left + w), height: w,
+          color: black,
+        });
+      }
+      left += w;
+    }
+    const totalWidth = left;
+    const textSize = 9;
+    const textWidth = font.widthOfTextAtSize(data, textSize);
+    page.drawText(data, {
+      x: marginLeftPt, y: finalBlY - totalWidth / 2 - textWidth / 2,
+      size: textSize, font, color: black, rotate: PDFLib.degrees(90),
+    });
+  }
 
   async function generate(xml, opts, onProgress) {
     opts = opts || {};
@@ -138,9 +255,10 @@ def make_barcodes(xml, file_name, creation_ts):
     const colWidth = usableWidth / BARCODES_PER_ROW;
     const rowWidthPt = RATIO * MODULE_ROW_PIXEL_MM * MM;  // per PDF417 row, after rotation
     const colHeightPt = MODULE_COL_MM * MM;                // per original column, after rotation
-    const black = rgb(0, 0, 0);
 
     const pageCount = Math.max(1, Math.ceil(barcodes.length / BARCODES_PER_ROW));
+    const orgNrRaw = String(opts.statementId || "").slice(2, 7);
+    const orgNr = /^\d{5}$/.test(orgNrRaw) ? orgNrRaw : "00000";
     let page = null;
     const newPage = (pageNum) => {
       page = pdf.addPage([PAGE_W, PAGE_H]);
@@ -149,6 +267,9 @@ def make_barcodes(xml, file_name, creation_ts):
         `Steuerjahr ${opts.taxYear || ""} - Barcode (macro PDF417) - nicht bank-signiert - Seite ${pageNum + 1} / ${pageCount}`,
         { x: ML, y: PAGE_H - MT + 6, size: 8, font, color: rgb(0.3, 0.3, 0.3) }
       );
+      drawPageIdentifierBarcode(page, font, {
+        orgNr, pageNumber: pageNum + 1, isBarcodePage: true, pageHeightPt: PAGE_H,
+      });
     };
 
     for (let bi = 0; bi < barcodes.length; bi++) {
@@ -166,16 +287,9 @@ def make_barcodes(xml, file_name, creation_ts):
         x: originX, y: originY + rotatedHeight + 4, size: 7, font, color: rgb(0.4, 0.4, 0.4),
       });
 
-      for (let r = 0; r < bc.rows.length; r++) {
-        const xBand = originX + r * rowWidthPt;
-        for (const [start, len] of runs(bc.rows[r])) {
-          page.drawRectangle({
-            x: xBand, y: originY + start * colHeightPt,
-            width: rowWidthPt, height: len * colHeightPt,
-            color: black,
-          });
-        }
-      }
+      const pngBytes = await moduleCanvasPng(bc);
+      const pngImage = await pdf.embedPng(pngBytes);
+      page.drawImage(pngImage, { x: originX, y: originY, width: rotatedWidth, height: rotatedHeight });
     }
     return await pdf.save();
   }
