@@ -3,7 +3,13 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Swissquote → eCH-0196 (Browser-only)</title>
+  <!-- Privacy guarantee enforced by the browser: the page may only talk to its
+       own origin. No uploads to third parties are technically possible.
+       When activating the paywall, add the verifyUrl origin to connect-src. -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; worker-src 'self' blob:; object-src 'none'; frame-src 'none'; form-action 'none'; base-uri 'self'">
+  <meta name="referrer" content="no-referrer">
+  <title>E‑Steuerauszug Generator – Kontoauszug → eCH‑0196</title>
+  <meta name="description" content="Erstellt aus dem Kontoauszug Ihrer Bank einen eCH‑0196‑Steuerauszug (XML und PDF mit Barcode) für die kantonale Steuersoftware. Läuft komplett lokal im Browser.">
   <link rel="stylesheet" href="styles.css">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧾</text></svg>">
 </head>
@@ -11,10 +17,10 @@
   <div class="wrap">
     <header class="app">
       <div class="logo">
-        <div class="mark">SQ</div>
+        <div class="mark">eST</div>
         <div>
-          <h1>Swissquote → E‑Steuerauszug</h1>
-          <div class="sub">Läuft komplett im Browser · eCH‑0196 XML · kein Server</div>
+          <h1>E‑Steuerauszug Generator</h1>
+          <div class="sub">Kontoauszug → eCH‑0196 · alle Kantone · 100 % lokal im Browser</div>
         </div>
       </div>
       <button class="theme-toggle" id="themeToggle" type="button">◐ Theme</button>
@@ -22,92 +28,162 @@
 
     <div class="banner warn" style="margin:16px 0 0">
       <span class="ico">⚠️</span>
-      <div><strong>Inoffizielles Tool, keine Steuerberatung.</strong> Diese Anwendung ist ein privates Community‑Projekt und steht in <strong>keiner Verbindung zu Swissquote, softax oder einer Steuerbehörde</strong> – sie wird von keiner dieser Stellen erstellt, geprüft, unterstützt oder empfohlen. Alle Angaben ohne Gewähr; prüfen Sie den erzeugten Steuerauszug sorgfältig, bevor Sie ihn einreichen. Bei Unsicherheiten wenden Sie sich an eine Steuerberatung.</div>
+      <div><strong>Inoffizielles Hilfsmittel, keine Steuerberatung.</strong> Kein Angebot einer Bank, eines Softwareherstellers oder einer Steuerverwaltung. Angaben ohne Gewähr – prüfen Sie den Steuerauszug vor dem Einreichen. <a href="agb.html">AGB</a></div>
     </div>
 
-    <div class="banner info" style="margin:16px 0">
-      <span class="ico">🔒</span>
-      <div><strong>Ihre Daten verlassen dieses Gerät nicht.</strong> CSV/PDF werden lokal im Browser verarbeitet – nichts wird hochgeladen. Der eCH‑0196‑XML wird hier erzeugt und heruntergeladen.</div>
-    </div>
+    <ol class="stepper" id="stepper" aria-label="Fortschritt">
+      <li data-step="1" class="active"><span class="n">1</span> Einlesen</li>
+      <li data-step="2"><span class="n">2</span> Prüfen</li>
+      <li data-step="3"><span class="n">3</span> Angaben</li>
+      <li data-step="4"><span class="n">4</span> Vorschau &amp; Download</li>
+    </ol>
 
-    <div class="card">
-      <h2>1. Datei wählen</h2>
-      <p class="hint"><strong>Kontoauszug‑PDF</strong> (empfohlen – inkl. Kontostände &amp; Personalien) oder Transaktions‑<strong>CSV</strong>.</p>
-      <div class="dropzone" id="dropzone">
+    <!-- STEP 1 -->
+    <section class="card" id="srcCard">
+      <h2>1. Kontoauszug einlesen</h2>
+      <div class="source-grid">
+        <div class="source"><div class="src-t">Swissquote</div><div class="src-d">Kontoauszug‑PDF oder Transaktions‑CSV – wird automatisch erkannt.</div></div>
+        <div class="source"><div class="src-t">Jede andere Bank</div><div class="src-d">CSV/TXT‑Export aus dem E‑Banking – Spalten werden erkannt und lassen sich zuordnen.</div></div>
+        <div class="source"><div class="src-t">Ohne Export</div><div class="src-d">Bestände, Erträge und Kontostände aus dem Vermögensausweis manuell erfassen.</div></div>
+      </div>
+      <div class="dropzone" id="dropzone" tabindex="0" role="button" aria-label="Datei auswählen">
         <div class="big">Datei hierher ziehen oder klicken</div>
-        <div class="small">Kontoauszug‑<code>PDF</code> oder Transaktions‑<code>CSV</code></div>
+        <div class="small"><code>CSV</code>, <code>TXT</code> oder Swissquote‑<code>PDF</code> · wird nur lokal gelesen</div>
         <div class="file" id="fileName" hidden></div>
       </div>
-      <input type="file" id="fileInput" accept=".csv,.pdf,text/csv,application/pdf">
+      <input type="file" id="fileInput" accept=".csv,.txt,.tsv,.pdf,text/csv,text/plain,application/pdf">
+      <div class="actions" style="margin-top:12px">
+        <button class="btn ghost" id="manualBtn" type="button">✎ Ohne Datei manuell erfassen</button>
+      </div>
       <div id="parseStatus" class="muted-note" style="margin-top:8px"></div>
       <div class="error" id="err" hidden></div>
-    </div>
+    </section>
 
-    <div class="card" id="formCard" hidden>
-      <h2>2. Angaben</h2>
-      <div class="grid3">
-        <div class="field"><label>Steuerjahr</label><select id="f_year"></select></div>
-        <div class="field"><label>Kanton</label><select id="f_canton"></select></div>
-        <div class="field"><label>Kunden‑/Kontonummer</label><input id="f_client" placeholder="z.B. 123456"></div>
-      </div>
+    <!-- STEP 2a: column mapping for generic CSV -->
+    <section class="card" id="mapCard" hidden>
+      <h2>2. Spalten &amp; Transaktionsarten zuordnen</h2>
+      <p class="hint">Die Spalten wurden automatisch erkannt. Bitte kontrollieren Sie die Zuordnung – die Vorschau unten aktualisiert sich sofort.</p>
+      <div id="profileNote"></div>
+      <div class="grid3" id="mapGrid"></div>
       <div class="grid3" style="margin-top:12px">
-        <div class="field"><label>Vorname</label><input id="f_first"></div>
-        <div class="field"><label>Nachname</label><input id="f_last"></div>
-        <div class="field"><label>Steuerwerte</label>
+        <div class="field"><label for="m_decimal">Dezimaltrennzeichen</label>
+          <select id="m_decimal"><option value="">automatisch</option><option value=".">Punkt (1'234.50)</option><option value=",">Komma (1.234,50)</option></select></div>
+        <div class="field"><label for="m_date">Datumsformat</label>
+          <select id="m_date"><option value="">automatisch</option><option value="DMY">TT.MM.JJJJ</option><option value="MDY">MM/TT/JJJJ</option></select></div>
+        <div class="field"><label for="m_ccy">Währung, falls keine Spalte</label>
+          <select id="m_ccy"><option>CHF</option><option>EUR</option><option>USD</option><option>GBP</option></select></div>
+      </div>
+      <div class="subhead">Transaktionsarten</div>
+      <div id="typeTable"></div>
+      <div class="subhead">Vorschau (erste Zeilen)</div>
+      <div id="mapPreview"></div>
+      <div class="profile-row">
+        <label class="check" style="margin:0"><input type="checkbox" id="saveProfile" checked> Zuordnung für diese Bank in diesem Browser merken</label>
+        <input id="profileName" placeholder="Name der Bank (optional)" style="max-width:240px">
+      </div>
+      <div class="actions"><button class="btn primary" id="mapApply" type="button">Übernehmen →</button></div>
+    </section>
+
+    <!-- STEP 2b: manual entry -->
+    <section class="card" id="manualCard" hidden>
+      <h2>2. Angaben manuell erfassen</h2>
+      <p class="hint">Übertragen Sie die Werte aus dem Vermögens‑ oder Steuerausweis Ihrer Bank. Minimal genügt <strong>Bestand 31.12.</strong> je Wertschrift; ergänzen Sie Dividenden, Käufe/Verkäufe und Kontostände, soweit vorhanden. Beträge in Originalwährung, Dezimalpunkt.</p>
+      <div class="table-wrap"><table class="edit-table" id="manualTable">
+        <thead><tr><th>Art</th><th>Datum</th><th>ISIN</th><th>Bezeichnung</th><th class="num">Stück</th><th class="num">Betrag netto</th><th class="num">Steuer/Gebühr</th><th>Whg.</th><th></th></tr></thead>
+        <tbody></tbody>
+      </table></div>
+      <div class="actions">
+        <button class="btn ghost" id="manualAdd" type="button">+ Zeile</button>
+        <button class="btn primary" id="manualApply" type="button">Übernehmen →</button>
+      </div>
+    </section>
+
+    <!-- STEP 3 -->
+    <section class="card" id="formCard" hidden>
+      <h2>3. Angaben zum Steuerauszug</h2>
+      <div class="subhead">Steuerpflichtige Person</div>
+      <div class="grid3">
+        <div class="field"><label for="f_first">Vorname <span class="req">*</span></label><input id="f_first" autocomplete="off"></div>
+        <div class="field"><label for="f_last">Nachname <span class="req">*</span></label><input id="f_last" autocomplete="off"></div>
+        <div class="field"><label for="f_client">Kunden‑/Kontonummer</label><input id="f_client" placeholder="z.B. 123456" autocomplete="off"></div>
+      </div>
+      <div class="subhead">Steuerperiode</div>
+      <div class="grid3">
+        <div class="field"><label for="f_year">Steuerjahr <span class="req">*</span></label><select id="f_year"></select></div>
+        <div class="field"><label for="f_canton">Wohnkanton <span class="req">*</span></label><select id="f_canton"></select></div>
+        <div class="field"><label for="f_taxmode">Steuerwerte</label>
           <select id="f_taxmode">
-            <option value="minimal" selected>Minimal (Kursliste – empfohlen)</option>
-            <option value="estimate">Schätzwerte einsetzen</option>
+            <option value="minimal" selected>Aus Kursliste der Steuersoftware (empfohlen)</option>
+            <option value="estimate">Eigene Schätzung mitliefern</option>
           </select>
         </div>
       </div>
-      <div class="grid3" style="margin-top:12px">
-        <div class="field"><label>Bank / Institut <span class="desc" style="text-transform:none;font-weight:400">(auf dem Steuerauszug)</span></label>
+      <div class="subhead">Bank / Depotstelle</div>
+      <div class="grid3">
+        <div class="field"><label for="f_institution">Name der Bank</label>
           <input id="f_institution" placeholder="z.B. Ihre Depotbank AG" value="Musterbank AG"></div>
-        <div class="field"><label>BC‑/Clearing‑Nr. <span class="desc" style="text-transform:none;font-weight:400">(optional)</span></label>
-          <input id="f_clearing" placeholder="00000" value="00000" maxlength="5"></div>
+        <div class="field"><label for="f_clearing">BC‑/Clearing‑Nr. <span class="desc">(optional)</span></label>
+          <input id="f_clearing" placeholder="00000" value="00000" maxlength="5" inputmode="numeric"></div>
       </div>
-      <p class="hint">Voreingestellt ist eine <strong>fiktive Platzhalter‑Bank</strong>. Tragen Sie hier Ihr echtes Institut ein (z.B. Swissquote), damit der Steuerauszug korrekt beschriftet ist.</p>
-      <div class="subhead">Vorjahres‑Positionen / Bindung an softax <span class="desc" style="text-transform:none;font-weight:400">(optional)</span></div>
-      <p class="hint">Damit Titel, die in softax schon erfasst sind, weitergeführt statt doppelt angelegt werden. Vorjahres‑<strong>eCH‑0196‑XML</strong> oder softax‑<strong>Wertschriftenexport (PDF)</strong> wählen.</p>
-      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-        <input type="file" id="cfInput" accept=".xml,.pdf" style="display:none">
-        <button class="btn ghost" id="cfBtn" type="button">Vorjahres‑Datei wählen …</button>
-        <span id="cfStatus" class="muted-note"></span>
-      </div>
-      <div id="cfTableHost" style="margin-top:12px"></div>
+      <p class="hint">Voreingestellt ist die fiktive Platzhalter‑Bank „Musterbank AG“. Tragen Sie Ihre Bank ein, damit der Steuerauszug korrekt beschriftet ist.</p>
 
-      <div class="subhead">Umrechnungskurse in CHF</div>
-      <div class="grid3" id="fxGrid"></div>
+      <details class="fold" id="cfFold">
+        <summary>Vorjahr übernehmen <span class="desc">(optional – verhindert doppelt erfasste Titel)</span></summary>
+        <p class="hint">Bereits in Ihrer Steuersoftware erfasste Titel werden weitergeführt statt neu angelegt. Wählen Sie den <strong>Vorjahres‑Steuerauszug (eCH‑0196‑XML, alle Kantone)</strong> oder den <strong>SofTax‑Kontrollausdruck „Wertschriftenverzeichnis“ (PDF)</strong>.</p>
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+          <input type="file" id="cfInput" accept=".xml,.pdf" style="display:none">
+          <button class="btn ghost" id="cfBtn" type="button">Vorjahres‑Datei wählen …</button>
+          <span id="cfStatus" class="muted-note"></span>
+        </div>
+        <div id="cfTableHost" style="margin-top:12px"></div>
+      </details>
+
+      <details class="fold" id="fxFold">
+        <summary>Umrechnungskurse in CHF <span class="desc" id="fxSummary"></span></summary>
+        <p class="hint">Für Erträge in Fremdwährung. Bitte mit der ESTV‑Kursliste (Devisenkurse per 31.12.) abgleichen.</p>
+        <div class="grid3" id="fxGrid"></div>
+      </details>
+
+      <div class="error" id="formErr" hidden></div>
       <div class="actions">
-        <button class="btn primary" id="genBtn" type="button">eCH‑0196 XML &amp; Dashboard erzeugen</button>
+        <button class="btn primary" id="genBtn" type="button">Steuerauszug erstellen →</button>
       </div>
-    </div>
+    </section>
 
-    <div class="card" id="resultCard" hidden>
+    <!-- STEP 4 -->
+    <section class="card" id="resultCard" hidden>
       <div style="display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap">
-        <div><h2 style="margin-bottom:6px">3. Ergebnis</h2><div id="badge"></div></div>
+        <div><h2 style="margin-bottom:6px">4. Vorschau &amp; Download</h2><div id="badge"></div></div>
         <div class="actions" style="margin-top:0">
           <button class="btn ghost" id="dlBtn" type="button">⬇ XML</button>
           <button class="btn primary" id="dlPdfBtn" type="button">⬇ PDF mit Barcode</button>
         </div>
       </div>
-      <div id="pdfStatus" class="muted-note" style="margin-top:8px"></div>
-      <div class="banner info" style="margin-top:12px"><span class="ico">ℹ️</span><div>Importieren Sie die <strong>PDF mit Barcode</strong> in Ihre Steuersoftware (softax scannt den Barcode) – oder die XML direkt. Selbst erzeugt, <strong>nicht bank‑signiert</strong>; die Software ergänzt die offiziellen Steuerwerte. Der Barcode wird beim ersten Mal etwas dauern (Python‑Laufzeit lädt einmalig lokal).</div></div>
-    </div>
+      <div id="priceNote" class="muted-note" style="margin-top:6px"></div>
+      <div id="pdfStatus" class="muted-note" style="margin-top:4px"></div>
+      <div id="warnHost"></div>
+      <div id="previewHost"></div>
+      <div class="banner info" style="margin-top:12px"><span class="ico">ℹ️</span><div>Importieren Sie die <strong>XML</strong> oder das <strong>PDF mit Barcode</strong> in Ihre kantonale Steuersoftware (eCH‑0196‑Import, z.&nbsp;B. SofTax). Der Auszug ist selbst erstellt und <strong>nicht bank‑signiert</strong>; Steuerwerte ergänzt die Software aus der offiziellen Kursliste.</div></div>
+    </section>
 
     <div id="dashboardHost"></div>
 
     <footer class="app">
-      100 % Browser · eCH‑0196 v2.2 · pdf.js · Kein Ersatz für Steuerberatung.
+      <nav class="legal-links"><a href="agb.html">AGB</a> · <a href="datenschutz.html">Datenschutz</a> · <a href="impressum.html">Impressum</a> · <button type="button" class="linkish" id="showConsent">Datenschutz‑Hinweis</button></nav>
+      100 % Browser · eCH‑0196 v2.2 · Kein Ersatz für Steuerberatung.
     </footer>
   </div>
 
+  <script src="config.js"></script>
   <script src="vendor/pdf.min.js"></script>
   <script src="vendor/pdf-lib.min.js"></script>
   <script src="pdfparse.js"></script>
   <script src="carryforward.js"></script>
   <script src="barcode.js"></script>
   <script src="core.js"></script>
+  <script src="importers.js"></script>
+  <script src="consent.js"></script>
+  <script src="paywall.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

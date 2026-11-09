@@ -152,6 +152,14 @@
 
     for (const t of txns) {
       const ty = t.type;
+      // Explicit holdings (generic / manual imports): fix the opening or the
+      // closing quantity instead of inferring it from the trades.
+      if (ty === "Bestand 01.01." || ty === "Bestand 31.12.") {
+        const inst = getInst(t);
+        if (ty === "Bestand 01.01.") inst.openingFixed = t.quantity || 0;
+        else inst.closingFixed = t.quantity || 0;
+        continue;
+      }
       if (INTEREST.has(ty)) {
         cashInterest.push({ date: t.date, gross: grossFrom(t) || 0, tax: t.costs || 0, net: t.net || 0, currency: t.currency });
         continue;
@@ -188,8 +196,20 @@
         .sort((a, b) => (a.dateKey - b.dateKey) || (b.row - a.row));
       let running = 0, minRun = 0;
       for (const e of events) { running += e.qty; if (running < minRun) minRun = running; }
-      inst.openingQty = minRun < 0 ? -minRun : 0;
-      inst.openingInferred = inst.openingQty > 0;
+      if (inst.openingFixed != null) {
+        inst.openingQty = inst.openingFixed;
+        inst.openingInferred = false;
+      } else if (inst.closingFixed != null) {
+        inst.openingQty = inst.closingFixed - running;
+        inst.openingInferred = false;
+        if (inst.openingQty < 0) {
+          warnings.push(`${inst.name}: Bestand 31.12. passt nicht zu den Transaktionen (Anfangsbestand wäre negativ).`);
+          inst.openingQty = 0;
+        }
+      } else {
+        inst.openingQty = minRun < 0 ? -minRun : 0;
+        inst.openingInferred = inst.openingQty > 0;
+      }
       inst.closingQty = inst.openingQty + running;
     }
     return { instruments: Array.from(instruments.values()), cashInterest, warnings };
