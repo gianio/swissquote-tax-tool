@@ -1,0 +1,11 @@
+Musterbank AG - Transaktionsliste
+Depot 12345-67 / Zeitraum 01.01.2025 - 31.12.2025
+
+Trade Date;Action;Instrument;ISIN;Quantity;Price;Net Amount;Fees;Currency
+15.01.2025;Buy;Nestle SA;CH0038863350;20;95,50;-1'912,00;2,00;CHF
+03.03.2025;Buy;Apple Inc;US0378331005;10;180,25;-1'805,50;3,00;USD
+25.04.2025;Dividend;Nestle SA;CH0038863350;;;39,00;21,00;CHF
+15.05.2025;Dividend;Apple Inc;US0378331005;;;2,13;0,37;USD
+10.09.2025;Sell;Nestle SA;CH0038863350;-5;88,00;438,00;2,00;CHF
+30.11.2025;Deposit;;;;;5'000,00;;CHF
+31.12.2025;Interest;;;;;12,40;;CHF

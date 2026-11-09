@@ -1,4 +1,4 @@
-/* Swissquote → eCH-0196 converter — theme-aware, dependency-free. */
+/* E-Steuerauszug Generator — theme-aware, dependency-free. */
 :root {
   color-scheme: light;
   --surface-1: #fcfcfb;
@@ -196,8 +196,86 @@ tr:last-child td { border-bottom: none; }
 footer.app { text-align: center; color: var(--muted); font-size: 12px; margin-top: 40px; }
 footer.app a { color: var(--text-secondary); }
 
+/* Stepper (ordered list) */
+.stepper { list-style: none; display: flex; gap: 8px; margin: 20px 0 24px; padding: 0; flex-wrap: wrap; }
+.stepper li {
+  display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted);
+  padding: 6px 12px; border-radius: 999px; border: 1px solid var(--border); background: var(--card);
+}
+.stepper .n { width: 20px; height: 20px; border-radius: 50%; background: var(--grid); color: var(--text-secondary); display: grid; place-items: center; font-size: 12px; font-weight: 600; }
+.stepper li.active { color: var(--text-primary); border-color: var(--accent); }
+.stepper li.active .n { background: var(--accent); color: #fff; }
+.stepper li.done .n { background: var(--good); color: #fff; }
+
+/* Source overview */
+.source-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin: 12px 0 16px; }
+.source { border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; background: var(--surface-1); }
+.source .src-t { font-weight: 700; font-size: 14px; }
+.source .src-d { font-size: 12.5px; color: var(--text-secondary); margin-top: 3px; }
+
+/* Form helpers */
+.req { color: var(--critical); }
+.field input.invalid, .field select.invalid { border-color: var(--critical); outline-color: var(--critical); }
+.fold { margin-top: 18px; border: 1px solid var(--border); border-radius: 10px; padding: 10px 14px; background: var(--surface-1); }
+.fold > summary { cursor: pointer; font-weight: 600; font-size: 14px; }
+.fold > summary .desc { font-weight: 400; color: var(--muted); font-size: 12.5px; }
+.fold[open] > summary { margin-bottom: 10px; }
+.profile-row { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; margin-top: 16px; }
+.profile-row input { font-family: var(--font); font-size: 14px; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface-1); color: var(--text-primary); }
+tr.needs td { background: color-mix(in srgb, var(--warning) 12%, transparent); }
+td select, td input { font-family: var(--font); font-size: 13px; padding: 6px 8px; border-radius: 7px; border: 1px solid var(--border); background: var(--surface-1); color: var(--text-primary); }
+.edit-table td { padding: 5px 4px; }
+.edit-table input.num { text-align: right; }
+.btn.small { padding: 5px 9px; font-size: 12px; }
+.check { display: flex; gap: 10px; align-items: flex-start; font-size: 13.5px; margin: 10px 0; cursor: pointer; }
+.check input { margin-top: 3px; width: 16px; height: 16px; accent-color: var(--accent); flex: none; }
+.linkish { background: none; border: 0; padding: 0; font: inherit; color: var(--text-secondary); text-decoration: underline; cursor: pointer; }
+.legal-links { margin-bottom: 6px; }
+
+/* Modals */
+.modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.45); display: grid; place-items: center; padding: 16px; z-index: 50; }
+.modal { background: var(--card); color: var(--text-primary); border-radius: 14px; max-width: 560px; width: 100%; max-height: calc(100vh - 32px); overflow: auto; padding: 24px; box-shadow: 0 10px 40px rgba(0,0,0,.3); }
+.modal h2 { margin: 0 0 6px; font-size: 19px; }
+.modal-ico { font-size: 30px; margin-bottom: 4px; }
+.checklist { padding-left: 0; list-style: none; margin: 12px 0; font-size: 13.5px; }
+.checklist li { position: relative; padding-left: 24px; margin: 7px 0; }
+.checklist li::before { content: "✓"; position: absolute; left: 2px; color: var(--good-text); font-weight: 700; }
+
+/* Payment */
+.pay-methods { display: grid; gap: 10px; margin: 16px 0 6px; }
+.pay-btn { display: flex; align-items: center; gap: 14px; width: 100%; padding: 13px 16px; border-radius: 10px; border: 1px solid var(--border); background: var(--surface-1); color: var(--text-primary); font: 600 15px var(--font); cursor: pointer; text-align: left; }
+.pay-btn:hover:not(:disabled) { border-color: var(--accent); }
+.pay-btn:disabled { opacity: .55; cursor: not-allowed; }
+.pm-logo { min-width: 78px; text-align: center; font-size: 12px; font-weight: 800; letter-spacing: .04em; padding: 6px 8px; border-radius: 6px; }
+.pay-btn.twint .pm-logo { background: #000; color: #fff; }
+.pay-btn.card .pm-logo { background: #1a1f71; color: #fff; }
+
+/* Statement preview */
+.statement-preview { margin-top: 16px; border: 1px solid var(--border); border-radius: 10px; padding: 18px; background: var(--surface-1); }
+.sp-head { display: flex; justify-content: space-between; gap: 20px; flex-wrap: wrap; border-bottom: 2px solid var(--text-primary); padding-bottom: 12px; margin-bottom: 12px; }
+.sp-bank { font-size: 20px; font-weight: 800; }
+.sp-title { font-size: 15px; font-weight: 600; margin-top: 4px; }
+.sp-meta { display: grid; grid-template-columns: auto auto; gap: 2px 16px; margin: 0; font-size: 12.5px; }
+.sp-meta dt { color: var(--muted); }
+.sp-meta dd { margin: 0; font-weight: 600; }
+.sp-totals td { font-weight: 700; font-variant-numeric: tabular-nums; }
+.sp-totals th .desc { font-weight: 400; text-transform: none; }
+.sp-sub { font-weight: 700; font-size: 13px; margin: 16px 0 4px; }
+.sp-wrap { position: relative; }
+tr.masked td { filter: blur(3px); color: var(--muted); user-select: none; }
+.sp-lock { text-align: center; font-size: 13px; font-weight: 600; padding: 8px; margin-top: 4px; border-radius: 8px; background: color-mix(in srgb, var(--accent) 8%, transparent); }
+.sp-foot { font-size: 11.5px; color: var(--muted); margin-top: 12px; }
+
+/* Legal pages */
+.legal { max-width: 780px; }
+.legal h1 { font-size: 24px; }
+.legal h2 { font-size: 17px; margin-top: 26px; }
+.legal p, .legal li { font-size: 14.5px; }
+.legal .draft { margin-bottom: 18px; }
+
 @media (max-width: 760px) {
   .grid2, .grid3, .split { grid-template-columns: 1fr; }
   .kpis { grid-template-columns: repeat(2, 1fr); }
   .bar-row { grid-template-columns: 96px 1fr 76px; }
+  .source-grid { grid-template-columns: 1fr; }
 }

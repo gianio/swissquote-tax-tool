@@ -1,4 +1,4 @@
-# Browser‑only app — client‑side Swissquote → eCH‑0196
+# Browser‑only app — E‑Steuerauszug Generator (any bank → eCH‑0196)
 
 The **least‑compliance‑exposure** build: the entire pipeline runs **in the
 visitor's browser**, with **no server**. Your CSV/PDF never leaves your device,
@@ -30,6 +30,38 @@ any domain (GitHub Pages, Netlify, S3, …).
   dividends & positions tables.
 - **Download** the XML and the barcode PDF. No network calls at all — pdf.js,
   pdf‑lib, Pyodide and `pdf417gen` are all vendored in `vendor/`.
+
+## Any bank, any canton
+
+- **Swissquote** PDF/CSV is recognised automatically.
+- **Any other bank's CSV/TXT export** goes through `importers.js`: preamble
+  lines are skipped, the delimiter/decimal separator/date format are detected,
+  columns are auto‑matched by DE/EN/FR header synonyms and transaction types by
+  keyword — both can be re‑assigned in the UI with a live preview. A mapping
+  can be saved per bank as a local *Bankprofil* (localStorage, column names only).
+- **Manual entry** for banks without an export: *Bestand 31.12.*, dividends,
+  trades and cash balances from the Vermögensausweis.
+- **All 26 cantons**: eCH‑0196 is the national standard, so the XML/barcode PDF
+  works with any cantonal tax software that imports eCH‑0196. Carry‑forward
+  accepts the previous year's eCH‑0196 XML (all cantons) or a SofTax control
+  printout PDF.
+
+## Privacy, legal, payment
+
+- **Consent popup** on first visit (local processing, no sharing; AGB +
+  Datenschutz must be accepted).
+- **Content‑Security‑Policy** in `index.html` lets the page talk only to its
+  own origin, so data cannot be sent elsewhere even by accident.
+- **Legal drafts**: `agb.html`, `datenschutz.html`, `impressum.html` — fill in
+  the `[placeholders]` and have them reviewed before going public.
+- **Paywall (off)**: `paywall.js` + `paid.html`, configured in `config.js`
+  (`paywall.enabled: false`). TWINT and credit card via a hosted checkout in a
+  separate window (statement stays in memory), verified by a small server
+  endpoint. Preview the dialog with `index.html?paywall=demo`. Being fully
+  client‑side, the gate can be bypassed by technical users — accepted on
+  purpose for the no‑upload design.
+- **Preview**: step 4 renders part of the statement; while locked, rows after
+  the first three are masked (not just blurred) until payment.
 
 ## Try it
 
